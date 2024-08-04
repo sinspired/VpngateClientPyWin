@@ -196,6 +196,7 @@ class VPN:
                     print("\033[33mBad download speed,attempting next server...\033[0m")
                     self.terminate_vpn(proc)
                     os.remove(conf.name)
+                    os.remove(statusFile)
                     return False
 
                 # Ask the user if she wishes to use this VPN.
@@ -203,6 +204,7 @@ class VPN:
                     print("\033[33mNext VPN...\033[0m")
                     self.terminate_vpn(proc)
                     os.remove(conf.name)
+                    os.remove(statusFile)
                     return False
 
                 def read_stats(file_path):
@@ -604,9 +606,13 @@ def speedtest():
 
     chunk_size = 4096  # 每次读取的块大小，单位为字节
     duration = 5  # 测试持续时间，单位为秒
+    timeout = 20  # 请求超时时间，单位为秒
 
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    }
     try:
-        with requests.get(url, stream=True) as response:
+        with requests.get(url, stream=True,timeout=timeout,headers=headers) as response:
             if response.status_code == 200:
                 file_size = 0
                 start_time = time.time()
@@ -633,7 +639,7 @@ def speedtest():
                 return 0
     except Exception as e:
         print(f"下载错误: {e}")
-        return 1
+        return 0.1
 
 
 def parse_args():
