@@ -1,0 +1,2 @@
+console==0.9907
+setuptools==72.1.0
