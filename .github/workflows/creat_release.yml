@@ -42,7 +42,7 @@ jobs:
         run: |
           LATEST_TAG: ${{ steps.get_latest_tag.outputs.tag }}
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
-        shell: bash
+          tag_name: ${{ env.LATEST_TAG }}
       
       - uses: actions/download-artifact@v3
         with:
