@@ -23,9 +23,13 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile vpngateclient/vpngateclient.py
+          pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
+
         env:
           PYTHONUNBUFFERED: 1
+
+      - name: List files in dist
+        run: ls dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
