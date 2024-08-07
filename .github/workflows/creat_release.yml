@@ -1,12 +1,12 @@
 name: Build and Release
 on:
   push:
-    tags:
-      - 'v*'
+    #tags:
+      #- 'v*'
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,7 +32,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: windows-latest
     permissions:
       contents: write
     steps:
