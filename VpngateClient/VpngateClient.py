@@ -598,7 +598,7 @@ class VPNList:
         self.log.info("Filtering out unresponsive VPN servers")
 
         # The number of concurrent probes
-        n = args.probes
+        n = self.args.probes
 
         # Parallelize the probing to a thread pool
         with concurrent.futures.ThreadPoolExecutor(max_workers=n) as ex:
@@ -796,15 +796,6 @@ def vpn_list_main(args):
     logger.info("\033[31mExiting...\033[0m")
 
 
-def main(args):
-    if args.ovpnfile:
-        # Load a single VPN from the given file.
-        return single_vpn_main(args)
-    else:
-        # Load list and try them in order
-        return vpn_list_main(args)
-
-
 def isAdmin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
@@ -843,7 +834,8 @@ def addOpenVPNtoSysPath():
         print(f"{openvpn_bin_path} doesn't exist,please install OpenVPN.")
 
 
-if __name__ == "__main__":
+def main():
+    args = parse_args()
     # Check if OpenVPN is installed
     if not shutil.which("openvpn"):
         # Check if OpenVPN BIN is added to PATH
@@ -853,16 +845,25 @@ if __name__ == "__main__":
                 "\033[31mOpenVPN is not installed on this system or added in system PATH.\033[0m"
             )
             exit(1)
-    if isAdmin():
-        args = parse_args()
 
-        if args.verbose:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            logging.basicConfig(level=logging.INFO)
-
-        sys.exit(main(args))
-    else:
+    if not isAdmin():
         ctypes.windll.shell32.ShellExecuteW(
             None, "runas", sys.executable, __file__, None, 1
         )
+        return 1
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
+    if args.ovpnfile:
+        # Load a single VPN from the given file.
+        return single_vpn_main(args)
+    else:
+        # Load list and try them in order
+        return vpn_list_main(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -16,6 +16,7 @@ debhelper-build-stamp
 *.tar.gz
 *.log
 *.substvars
+*.csv
 .vagrant
 debian/hello
 debian/files
