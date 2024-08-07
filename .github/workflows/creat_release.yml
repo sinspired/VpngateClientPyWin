@@ -41,7 +41,13 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-<<<<<<< HEAD
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get latest tag
+        id: get_latest_tag
+        uses: actions-ecosystem/action-get-latest-tag@v1
+
       - name: Download artifact
         uses: actions/download-artifact@v3
         with:
@@ -53,30 +59,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ steps.get_latest_tag.outputs.tag }}
+          release_name: Release ${{ steps.get_latest_tag.outputs.tag }}
           body: |
             Release of vpngateclient
           draft: false
           prerelease: false
           files: dist/vpngateclient.exe
-=======
-    - name: Download artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: vpngateclient-exe
-        path: .
-
-    - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        body: |
-          Release of vpngateclient
-        draft: false
-        prerelease: false
-        files: dist/vpngateclient.exe
->>>>>>> cf96c1f8c4dc02f7259101fe969eb817f3b9b536
