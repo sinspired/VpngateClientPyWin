@@ -39,10 +39,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get latest tag
         id: get_latest_tag
-        uses: actions-ecosystem/action-get-latest-tag@v1
+        run: |
+          echo "LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $GITHUB_ENV
       
-      - name: Set output using environment file
-        run: echo "LATEST_TAG=${{ steps.get_latest_tag.outputs.tag }}" >> $GITHUB_ENV
 
       - uses: actions/download-artifact@v4
         with:
