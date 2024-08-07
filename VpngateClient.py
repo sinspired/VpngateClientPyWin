@@ -437,7 +437,10 @@ class VPN:
     def speedtest(self):
         """Performs a speed test on the VPN connection."""
 
-        print("\033[90mPerforming connection speed test. Press CTRL+C to " + "stop it.\033[0m")
+        print(
+            "\033[90mPerforming connection speed test. Press CTRL+C to "
+            + "stop it.\033[0m"
+        )
         try:
             download_speed = speedtest()
             if download_speed < self.args.min_speed:
@@ -512,20 +515,40 @@ class VPNList:
         """Download the VPN list from the given URL and save it to the specified file path."""
         self.log.info("Downloading VPN list from \033[90;4m%s\033[0m", url)
 
-        # download with proxy
-        proxy = urllib.request.ProxyHandler(
-            {"http": "http://localhost:10809", "https": "https://localhost:10809"}
-        )
-        # proxy = urllib.request.getproxies()
-        # print(proxy)
-        opener = urllib.request.build_opener(proxy)
-        urllib.request.install_opener(opener)
+        try:
+            # Download with proxy
+            proxy = urllib.request.ProxyHandler(
+                {"http": "http://localhost:10809", "https": "https://localhost:10809"}
+            )
+            opener = urllib.request.build_opener(proxy)
+            urllib.request.install_opener(opener)
 
-        req = urllib.request.urlopen(url)
-        data = req.read()
-        with open(file_path, "wb") as f:
-            f.write(data)
-        self.log.info("VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path)
+            req = urllib.request.urlopen(url)
+            data = req.read()
+            with open(file_path, "wb") as f:
+                f.write(data)
+            self.log.info(
+                "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
+            )
+        except Exception as e:
+            self.log.error("Failed to download from %s: %s", url, e)
+            backup_url = "https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
+            self.log.info(
+                "Attempting to download from backup URL: \033[90;4m%s\033[0m",
+                backup_url,
+            )
+            try:
+                req = urllib.request.urlopen(backup_url)
+                data = req.read()
+                with open(file_path, "wb") as f:
+                    f.write(data)
+                self.log.info(
+                    "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
+                )
+            except Exception as e:
+                self.log.error(
+                    "Failed to download from backup URL %s: %s", backup_url, e
+                )
 
     def load_vpns(self, file_path):
         """Loads the VPN list from vpngate.net and parses then to |self.vpns|."""
@@ -601,7 +624,7 @@ class VPNList:
 def speedtest():
     """Performs a speedtest printing connection speeds in kb/s."""
     url = SPEED_TEST_URL
-    match = re.search(r'(\d+)MB', url)
+    match = re.search(r"(\d+)MB", url)
     FILESIZE = float(match.group(1))
 
     chunk_size = 4096  # 每次读取的块大小，单位为字节
@@ -609,10 +632,12 @@ def speedtest():
     timeout = 20  # 请求超时时间，单位为秒
 
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
     }
     try:
-        with requests.get(url, stream=True,timeout=timeout,headers=headers) as response:
+        with requests.get(
+            url, stream=True, timeout=timeout, headers=headers
+        ) as response:
             if response.status_code == 200:
                 file_size = 0
                 start_time = time.time()
@@ -787,13 +812,47 @@ def isAdmin():
         return False
 
 
+def addOpenVPNtoSysPath():
+    # OpenVPN bin 目录路径
+    openvpn_bin_path = r"C:\Program Files\OpenVPN\bin"
+
+    # 检查目录是否存在
+    if os.path.exists(openvpn_bin_path):
+        # 获取当前环境变量 PATH
+        current_path = os.environ.get("PATH", "")
+
+        # 检查 bin 目录是否在 PATH 中
+        if openvpn_bin_path not in current_path:
+            # 将 bin 目录添加到 PATH
+            os.environ["PATH"] = f"{openvpn_bin_path};{current_path}"
+            print(f"{openvpn_bin_path} 已添加到 PATH 环境变量中。")
+
+            # 如果需要将修改后的 PATH 持久化，可以使用以下代码
+            if sys.platform == "win32":
+                import winreg
+
+                def set_environment_variable(name, value):
+                    with winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE
+                    ) as key:
+                        winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, value)
+
+                set_environment_variable("PATH", os.environ["PATH"])
+                print("Environment PATH updated and add to Rigistry。")
+    else:
+        print(f"{openvpn_bin_path} doesn't exist,please install OpenVPN.")
+
+
 if __name__ == "__main__":
     # Check if OpenVPN is installed
     if not shutil.which("openvpn"):
-        print(
-            "\033[31mOpenVPN is not installed on this system or added in system PATH.\033[0m"
-        )
-        exit(1)
+        # Check if OpenVPN BIN is added to PATH
+        addOpenVPNtoSysPath()
+        if not shutil.which("openvpn"):
+            print(
+                "\033[31mOpenVPN is not installed on this system or added in system PATH.\033[0m"
+            )
+            exit(1)
     if isAdmin():
         args = parse_args()
 
