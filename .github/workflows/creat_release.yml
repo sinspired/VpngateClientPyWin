@@ -23,7 +23,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile vpngateclient/vpngateclient.py
+          pyinstaller --onefile VpngateClient/VpngateClient.py
         env:
           PYTHONUNBUFFERED: 1
 
