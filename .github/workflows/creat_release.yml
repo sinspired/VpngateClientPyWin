@@ -1,61 +1,42 @@
 name: Build and Release
 on:
   push:
+    # tags:
+    #   - 'v*'
+
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.x" # 选择你的 Python 版本
+          python-version: '3.x'
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install pyinstaller
       - name: Build executable
-        run: |
-          pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
-        env:
-          PYTHONUNBUFFERED: 1
-      - name: List files in dist
-        run: ls dist
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        run: pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
+      - uses: actions/upload-artifact@v3
         with:
           name: vpngateclient-exe
           path: dist/vpngateclient.exe
+
   release:
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Get latest tag
-        id: get_latest_tag
-        uses: actions-ecosystem/action-get-latest-tag@v1
-      - name: Download artifact
-        uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v3
         with:
           name: vpngateclient-exe
-          path: .
-      - name: List downloaded files
-        run: ls .
-      - name: Delete existing tag
-        run: |
-          git push --delete origin ${{ steps.get_latest_tag.outputs.tag }} || true
       - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.get_latest_tag.outputs.tag }}
-          name: Release ${{ steps.get_latest_tag.outputs.tag }}
-          body: |
-            Release of vpngateclient
-          draft: false
-          prerelease: false
-          files: ./vpngateclient.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: vpngateclient.exe
+          body: Release of vpngateclient
