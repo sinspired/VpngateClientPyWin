@@ -54,7 +54,7 @@ jobs:
           ls -l .    
       - name: Verify file existence
         run: |
-          if [ ! -f dist/VpngateClient.exe ]; then
+          if [ ! -f VpngateClient.exe ]; then
             echo "File not found!"
             exit 1
           else
