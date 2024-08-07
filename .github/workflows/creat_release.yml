@@ -1,36 +1,34 @@
 name: Build and Release
 on:
   push:
-    #tags:
-      #- 'v*'
+    tags:
+      - 'v*'
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
       - name: Cache pip
         uses: actions/cache@v3
         with:
-          path: ~/.cache/pip
+          path: C:\Users\runneradmin\AppData\Local\pip\Cache
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install pyinstaller
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
       - name: Build executable
         run: pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
       - uses: actions/upload-artifact@v4
         with:
           name: vpngateclient-exe
-          path: dist/vpngateclient.exe
+          path: dist\vpngateclient.exe
 
   release:
     needs: build
@@ -39,19 +37,18 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Get latest tag
         id: get_latest_tag
-        shell: pwsh
-        run: |
-          $latestTag = git describe --tags $(git rev-list --tags --max-count=1)
-          Write-Output "LATEST_TAG=$latestTag" >> $Env:GITHUB_ENV
+        uses: actions-ecosystem/action-get-latest-tag@v1
+      
+      - name: Set output using environment file
+        run: echo LATEST_TAG=${{ steps.get_latest_tag.outputs.tag }} >> $Env:GITHUB_ENV
 
       - uses: actions/download-artifact@v4
         with:
           name: vpngateclient-exe
-          
+          path: vpngateclient.exe
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
