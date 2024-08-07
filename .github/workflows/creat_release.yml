@@ -1,8 +1,8 @@
 name: Build and Release
 on:
   push:
-    #tags:
-      #- 'v*'
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -31,6 +31,7 @@ jobs:
             Write-Host "Executable built successfully."
           } else {
             Write-Error "Executable build failed."
+            exit 1
           }
       - uses: actions/upload-artifact@v4
         with:
@@ -62,7 +63,13 @@ jobs:
             Write-Host "Artifact downloaded successfully."
           } else {
             Write-Error "Artifact download failed."
+            exit 1
           }
+      - name: Print environment variables
+        run: |
+          echo "GITHUB_ENV contents:"
+          Get-Content $env:GITHUB_ENV
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -77,4 +84,5 @@ jobs:
             Write-Host "Release created successfully."
           } else {
             Write-Error "Release creation failed."
+            exit 1
           }
