@@ -17,11 +17,11 @@ jobs:
           pip install --upgrade pip
           pip install pyinstaller
       - name: Build executable
-        run: pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
+        run: pyinstaller --onefile --name VpngateClient.exe VpngateClient/VpngateClient.py
       - uses: actions/upload-artifact@v3
         with:
           name: vpngateclient-exe
-          path: dist/vpngateclient.exe
+          path: dist/VpngateClient.exe
 
   release:
     needs: build
@@ -38,6 +38,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: softprops/action-gh-release@v1
         with:
-          files: vpngateclient.exe
-          body: Release of vpngateclient
+          files: VpngateClient.exe
+          body: Release of VpngateClient
           tag_name: ${{ github.ref_name }}
