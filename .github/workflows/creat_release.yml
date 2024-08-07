@@ -24,11 +24,11 @@ jobs:
           pip install --upgrade pip
           pip install pyinstaller
       - name: Build executable
-        run: pyinstaller --onefile --name VpngateClient.exe VpngateClient/VpngateClient.py
+        run: pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
       - uses: actions/upload-artifact@v3
         with:
           name: vpngateclient-exe
-          path: dist/VpngateClient.exe
+          path: dist/vpngateclient.exe
 
   release:
     needs: build
@@ -39,22 +39,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get latest tag
         id: get_latest_tag
-        run: |
-          LATEST_TAG: ${{ steps.get_latest_tag.outputs.tag }}
-          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
-          tag_name: ${{ env.LATEST_TAG }}
+        uses: actions-ecosystem/action-get-latest-tag@v1
       
+      - name: Set output using environment file
+        run: echo "LATEST_TAG=${{ steps.get_latest_tag.outputs.tag }}" >> $GITHUB_ENV
+
+
       - uses: actions/download-artifact@v3
         with:
           name: vpngateclient-exe
-          path: .
-
+          
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LATEST_TAG: ${{ env.LATEST_TAG }}
         uses: softprops/action-gh-release@v1
         with:
-          files: ./VpngateClient.exe
-          body: Release of VpngateClient
+          files: vpngateclient.exe
+          body: Release of vpngateclient
           tag_name: ${{ env.LATEST_TAG }}
