@@ -2,39 +2,41 @@ name: Build and Release
 
 on:
   push:
+    # tags:
+    #   - 'v*.*.*'  # 例如 v1.0.0
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x" # 选择你的 Python 版本
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'  # 选择你的 Python 版本
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
 
-      - name: Build executable
-        run: |
-          pyinstaller --onefile vpngateclient/vpngateclient.py
-        env:
-          PYTHONUNBUFFERED: 1
+    - name: Build executable
+      run: |
+        pyinstaller --onefile vpngateclient/vpngateclient.py
+      env:
+        PYTHONUNBUFFERED: 1
 
-      - name: List files in dist
-        run: ls dist
+    - name: List files in dist
+      run: ls dist
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: vpngateclient-exe
-          path: dist/vpngateclient.exe
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: vpngateclient-exe
+        path: dist/vpngateclient*
 
   release:
     needs: build
@@ -57,4 +59,4 @@ jobs:
           Release of vpngateclient
         draft: false
         prerelease: false
-        files: dist/vpngateclient.exe
+        files: vpngateclient*
