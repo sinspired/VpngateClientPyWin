@@ -41,7 +41,8 @@ jobs:
         id: get_latest_tag
         run: |
           git fetch --tags
-          echo "LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $env:GITHUB_ENV
+          $tag = git describe --tags (git rev-list --tags --max-count=1)
+          echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
       
       - uses: actions/download-artifact@v4
         with:
