@@ -56,7 +56,11 @@ jobs:
 
       - name: List downloaded files
         run: ls .
-
+      - name: Delete existing tag
+        run: |
+          git tag -d ${{ steps.get_latest_tag.outputs.tag }}
+          git push origin :refs/tags/${{ steps.get_latest_tag.outputs.tag }}
+          
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
@@ -79,3 +83,4 @@ jobs:
           asset_path: ./vpngateclient.exe
           asset_name: vpngateclient.exe
           asset_content_type: application/octet-stream
+
