@@ -48,11 +48,24 @@ jobs:
         with:
           name: vpngateclient-exe
           
+      - name: Rename executable
+        run: |
+          mv vpngateclient.exe VpngateClient.exe
+          ls -l .    
+      - name: Verify file existence
+        run: |
+          if [ ! -f dist/VpngateClient.exe ]; then
+            echo "File not found!"
+            exit 1
+          else
+            echo "File exists."
+          fi
+          
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: softprops/action-gh-release@v1
         with:
-          files: vpngateclient.exe
+          files: VpngateClient.exe
           body: Release of vpngateclient
           tag_name: ${{ env.LATEST_TAG }}
