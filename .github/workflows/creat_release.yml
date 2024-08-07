@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,11 +28,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: vpngateclient-exe
-          path: dist/VpngateClient.exe
+          path: dist/vpngateclient.exe
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
