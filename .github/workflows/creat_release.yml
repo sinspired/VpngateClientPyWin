@@ -41,6 +41,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+<<<<<<< HEAD
       - name: Download artifact
         uses: actions/download-artifact@v3
         with:
@@ -59,3 +60,23 @@ jobs:
           draft: false
           prerelease: false
           files: dist/vpngateclient.exe
+=======
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: vpngateclient-exe
+        path: .
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Release of vpngateclient
+        draft: false
+        prerelease: false
+        files: dist/vpngateclient.exe
+>>>>>>> cf96c1f8c4dc02f7259101fe969eb817f3b9b536
