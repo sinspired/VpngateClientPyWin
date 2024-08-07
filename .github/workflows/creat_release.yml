@@ -40,34 +40,19 @@ jobs:
       - name: Get latest tag
         id: get_latest_tag
         uses: actions-ecosystem/action-get-latest-tag@v1
-
+      
       - name: Set output using environment file
         run: echo "LATEST_TAG=${{ steps.get_latest_tag.outputs.tag }}" >> $GITHUB_ENV
 
       - uses: actions/download-artifact@v4
         with:
           name: vpngateclient-exe
-
-      - name: Rename executable
-        run: mv vpngateclient.exe VpngateClient.exe
-
-      - name: Delete existing release asset
-        if: github.event_name == 'push' && github.event.ref == 'refs/heads/master'
-        run: |
-          ASSET_ID=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                           -H "Accept: application/vnd.github.v3+json" \
-                           https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.LATEST_TAG }} \
-                           | jq -r '.assets[] | select(.name == "VpngateClient.exe") | .id')
-          if [ -n "$ASSET_ID" ]; then
-            curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                          -H "Accept: application/vnd.github.v3+json" \
-                          https://api.github.com/repos/${{ github.repository }}/releases/assets/$ASSET_ID
-          fi
+          
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: softprops/action-gh-release@v1
         with:
-          files: VpngateClient.exe
-          body: Release of VpngateClient
+          files: vpngateclient.exe
+          body: Release of vpngateclient
           tag_name: ${{ env.LATEST_TAG }}
