@@ -39,8 +39,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get latest tag
         id: get_latest_tag
-        run: echo "LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $GITHUB_ENV
-
+        run: |
+          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+        shell: bash
+      
       - uses: actions/download-artifact@v3
         with:
           name: vpngateclient-exe
@@ -49,6 +52,7 @@ jobs:
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST_TAG: ${{ env.LATEST_TAG }}
         uses: softprops/action-gh-release@v1
         with:
           files: ./VpngateClient.exe
