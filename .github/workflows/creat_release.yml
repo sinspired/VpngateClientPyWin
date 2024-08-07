@@ -23,9 +23,12 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile VpngateClient/VpngateClient.py
+          pyinstaller --onefile vpngateclient/vpngateclient.py
         env:
           PYTHONUNBUFFERED: 1
+
+      - name: List files in dist
+        run: ls dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -37,21 +40,21 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: vpngateclient-exe
-          path: .
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: vpngateclient-exe
+        path: .
 
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            Release of vpngateclient
-          draft: false
-          prerelease: false
-          files: dist/vpngateclient.exe
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Release of vpngateclient
+        draft: false
+        prerelease: false
+        files: dist/vpngateclient.exe
