@@ -40,3 +40,4 @@ jobs:
         with:
           files: vpngateclient.exe
           body: Release of vpngateclient
+          tag_name: ${{ github.ref_name }}
