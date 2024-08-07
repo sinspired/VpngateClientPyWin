@@ -54,7 +54,11 @@ jobs:
           name: vpngateclient-exe
           path: .
 
+      - name: List downloaded files
+        run: ls .
+
       - name: Create GitHub Release
+        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,4 +69,11 @@ jobs:
             Release of vpngateclient
           draft: false
           prerelease: false
-          files: dist/vpngateclient.exe
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./vpngateclient.exe
+          asset_name: vpngateclient.exe
+          asset_content_type: application/octet-stream
