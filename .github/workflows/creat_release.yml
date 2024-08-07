@@ -27,7 +27,7 @@ jobs:
         run: pyinstaller --onefile --name VpngateClient.exe VpngateClient/VpngateClient.py
       - uses: actions/upload-artifact@v4
         with:
-          name: vpngateclient-exe
+          name: VpngateClient-exe
           path: dist/VpngateClient.exe
 
   release:
