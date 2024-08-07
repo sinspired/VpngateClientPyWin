@@ -9,6 +9,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
@@ -37,12 +39,14 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Get latest tag
         id: get_latest_tag
+        shell: pwsh
         run: |
           $latestTag = git describe --tags $(git rev-list --tags --max-count=1)
           Write-Output "LATEST_TAG=$latestTag" >> $Env:GITHUB_ENV
-
 
       - uses: actions/download-artifact@v4
         with:
