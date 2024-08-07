@@ -1,8 +1,8 @@
 name: Build and Release
 on:
   push:
-    #tags:
-      #- 'v*'
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -25,6 +25,13 @@ jobs:
           python -m pip install pyinstaller
       - name: Build executable
         run: pyinstaller --onefile --name vpngateclient.exe VpngateClient/VpngateClient.py
+      - name: Verify executable
+        run: |
+          if (Test-Path -Path dist\vpngateclient.exe) {
+            Write-Host "Executable built successfully."
+          } else {
+            Write-Error "Executable build failed."
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: vpngateclient-exe
@@ -43,12 +50,19 @@ jobs:
           git fetch --tags
           $tag = git describe --tags (git rev-list --tags --max-count=1)
           echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
+          echo "Latest tag: $tag"
       
       - uses: actions/download-artifact@v4
         with:
           name: vpngateclient-exe
           path: .
-
+      - name: Verify artifact
+        run: |
+          if (Test-Path -Path .\vpngateclient.exe) {
+            Write-Host "Artifact downloaded successfully."
+          } else {
+            Write-Error "Artifact download failed."
+          }
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -57,3 +71,10 @@ jobs:
           files: vpngateclient.exe
           body: Release of vpngateclient
           tag_name: ${{ env.LATEST_TAG }}
+      - name: Release Verification
+        run: |
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release created successfully."
+          } else {
+            Write-Error "Release creation failed."
+          }
