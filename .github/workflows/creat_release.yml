@@ -53,5 +53,5 @@ jobs:
         
         with:
           files: vpngateclient.exe
-          body: Release of vpngateclient，for windows
+          body: Release of vpngateclient
           tag_name: ${{ env.LATEST_TAG }}
