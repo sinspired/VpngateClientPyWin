@@ -43,6 +43,8 @@ jobs:
         run: |
           $tag = git describe --tags --abbrev=0
           echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
+          $tag_message = git tag -l --format='%(contents)' $LATEST_TAG
+          echo "TAG_MESSAGE=$tag_message" >> $env:GITHUB_ENV
       - uses: actions/download-artifact@v4
         with:
           name: vpngateclient-exe
@@ -60,5 +62,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: vpngateclient.exe
-          body: Windows Release of vpngateclient
+          name: "VPNGate Client ${{ env.LATEST_TAG }}"
+          body: |
+            Release of VPNGate Client ${{ env.LATEST_TAG }}
+            
+            ${{ env.TAG_MESSAGE }}
           tag_name: ${{ env.LATEST_TAG }}
