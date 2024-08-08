@@ -42,7 +42,7 @@ jobs:
         run: |
           $tag = git describe --tags --abbrev=0
           echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
-          $tagMessage = git tag -l --format='%(contents)' $tag
+          $tagMessage = git tag -l --format='%(contents)' $LATEST_TAG
           echo "TAG_MESSAGE=$tagMessage" >> $env:GITHUB_ENV
       
       - name: Delete old release
