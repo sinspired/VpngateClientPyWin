@@ -1,8 +1,10 @@
 *.egg-info
 *.pyc
 .pybuild
+*.spec
 __pycache__
 build
+dist
 
 # https://github.com/phusion/debian-packaging-for-the-modern-developer/blob/master/.gitignore
 debhelper-build-stamp

@@ -6,7 +6,6 @@ import concurrent.futures
 import csv
 import datetime
 from datetime import datetime, timedelta
-import io
 import logging
 import os
 import platform
@@ -16,7 +15,6 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import urllib.request
 import ctypes
@@ -258,9 +256,9 @@ class VPN:
                 try:
                     # Check statusFile an wait to keyboardinterrrupt
                     while monitor_connection(statusFile):
-                        time.sleep(2.5)
+                        time.sleep(5)
                     if not monitor_connection(statusFile):
-                        time.sleep(2.5)
+                        time.sleep(5)
                         if not monitor_connection(statusFile):
                             self.terminate_vpn(proc)
                             os.remove(conf.name)
@@ -532,7 +530,7 @@ class VPNList:
             )
         except Exception as e:
             self.log.error("Failed to download from %s: %s", url, e)
-            backup_url = "https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
+            backup_url = "https://mirror.ghproxy.com/https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
             self.log.info(
                 "Attempting to download from backup URL: \033[90;4m%s\033[0m",
                 backup_url,
