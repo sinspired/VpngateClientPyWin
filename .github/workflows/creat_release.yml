@@ -35,8 +35,8 @@ jobs:
       
       - name: Build executable
         run: |
-          pyinstaller --hidden-import=console.detection --onefile --uac-admin VpngateClient\VpngateClient.py
-          #pyinstaller --onefile --name vpngateclient.exe VpngateClient\VpngateClient.py
+          pyinstaller --onefile --uac-admin VpngateClient\VpngateClient.py
+          #pyinstaller --hidden-import=console.detection --onefile --name vpngateclient.exe VpngateClient\VpngateClient.py
           dir dist
       
       - name: Get tag info
