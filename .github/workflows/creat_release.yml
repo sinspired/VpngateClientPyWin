@@ -46,7 +46,8 @@ jobs:
           $tag = git describe --tags --abbrev=0
           echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
           $tagMessage = git tag -l --format='%(contents)' $LATEST_TAG
-          $tagMessage = $tagMessage -replace "`n", "`n"  # 将换行符替换为特定分隔符
+          $tagMessage = $tagMessage -replace "`n", "`n"  # 保留换行符
+          $tagMessage = $tagMessage -replace "`n", "`n- "  # 在每行前添加 Markdown 列表符号
           echo "TAG_MESSAGE=$tagMessage" >> $env:GITHUB_ENV
 
       - name: Delete old release
