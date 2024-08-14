@@ -1,8 +1,8 @@
 name: Build and Release
 on:
   push:
-    tags:
-      - "v*"
+    # tags:
+    #   - "v*"
 
 jobs:
   build-and-release:
@@ -46,6 +46,7 @@ jobs:
           $tag = git describe --tags --abbrev=0
           echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
           $tagMessage = git tag -l --format='%(contents)' $LATEST_TAG
+          $tagMessage = $tagMessage -replace "`n", "`n"  # 将换行符替换为特定分隔符
           echo "TAG_MESSAGE=$tagMessage" >> $env:GITHUB_ENV
 
       - name: Delete old release
