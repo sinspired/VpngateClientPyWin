@@ -28,6 +28,7 @@ SPEED_TEST_URL = "http://ipv4.download.thinkbroadband.com/100MB.zip"
 LOCAL_CSV_PATH = "servers.csv"
 # LOCAL_CSV_PATH = "list.csv"
 DEFAULT_EXPIRED_TIME = 8
+DEFAULT_MIN_SPEED = 0.1
 
 # Support Ansi
 console.ansi_capable
@@ -747,7 +748,7 @@ def parse_args():
     p.add_argument(
         "--min-speed",
         action="store",
-        default=0.5,
+        default=DEFAULT_MIN_SPEED,
         type=float,
         help="Min download speed",
     )
