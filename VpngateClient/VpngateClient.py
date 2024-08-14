@@ -537,6 +537,8 @@ class VPNList:
                 backup_url,
             )
             try:
+                # Uninstall proxy
+                urllib.request.install_opener(None)
                 req = urllib.request.urlopen(backup_url)
                 data = req.read()
                 with open(file_path, "wb") as f:
