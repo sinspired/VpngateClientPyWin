@@ -135,7 +135,7 @@ translations = {
     },
     "zh": {
         # info
-        "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] Windows 客户端, 开始运行...\033[0m",
+        "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] VPNGATE Windows 客户端, 开始运行...\033[0m",
         'vpnlist_expired':"VPN 服务器列表已过期，重新下载!",
         'download_from_url':"从 \033[90;4m%s\033[0m 下载 VPN 服务器列表",
         'vpnlist_download_saved_to_file':"VPN 服务器列表已下载并保存到 \033[90;4m%s\033[0m",
