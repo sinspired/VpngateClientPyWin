@@ -77,6 +77,11 @@ translations = {
     "en": {
         # info logger information
         "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] for Windows, Start running...\033[0m",
+        'vpnlist_expired':"VPN servers list expired,download now!",
+        'download_from_url':"Downloading VPN list from \033[90;4m%s\033[0m",
+        'vpnlist_download_saved_to_file':"VPN list downloaded and saved to \033[90;4m%s\033[0m",
+        'failed_to_download_from_url':"Failed to download from %s: %s",
+        'attempt_download_from_backup_url':"Attempting to download from backup URL: \033[90;4m%s\033[0m",
         "loading_vpn_list": "Loading VPN list from \033[90;4m%s\033[0m",
         "found_vpn_servers": "Found \033[32m%i\033[0m VPN servers",
         "filtering_servers": "Filtering out unresponsive VPN servers",
@@ -130,7 +135,12 @@ translations = {
     },
     "zh": {
         # info
-        "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] for Windows, 开始运行...\033[0m",
+        "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] Windows 客户端, 开始运行...\033[0m",
+        'vpnlist_expired':"VPN 服务器列表已过期，重新下载!",
+        'download_from_url':"从 \033[90;4m%s\033[0m 下载 VPN 服务器列表",
+        'vpnlist_download_saved_to_file':"VPN 服务器列表已下载并保存到 \033[90;4m%s\033[0m",
+        'failed_to_download_from_url':"从 %s 下载失败！错误信息： %s",
+        'attempt_download_from_backup_url':"尝试从备用网址下载: \033[90;4m%s\033[0m",
         "loading_vpn_list": "从文件 \033[90;4m%s\033[0m 加载VPN服务器列表",
         "found_vpn_servers": "总共 \033[32m%i\033[0m 个 VPN 服务器",
         "filtering_servers": "过滤无响应服务器",
@@ -626,7 +636,7 @@ class VPNList:
         # Check if the local CSV file exists and is not expired
         self.local_csv_path = LOCAL_CSV_PATH
         if self.is_file_expired(self.local_csv_path):
-            self.log.info("VPN servers list expired,download now!")
+            self.log.info(get_text('vpnlist_expired'))
             self.download_vpn_list(self.args.url, self.local_csv_path)
 
         # Fetch the list
@@ -647,7 +657,7 @@ class VPNList:
 
     def download_vpn_list(self, url, file_path):
         """Download the VPN list from the given URL and save it to the specified file path."""
-        self.log.info("Downloading VPN list from \033[90;4m%s\033[0m", url)
+        self.log.info(get_text('download_from_url'), url)
 
         try:
             # Download with proxy
@@ -662,13 +672,13 @@ class VPNList:
             with open(file_path, "wb") as f:
                 f.write(data)
             self.log.info(
-                "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
+                get_text('vpnlist_download_saved_to_file'), file_path
             )
         except Exception as e:
-            self.log.error("Failed to download from %s: %s", url, e)
+            self.log.error(get_text('failed_to_download_from_url'), url, e)
             backup_url = "https://mirror.ghproxy.com/https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
             self.log.info(
-                "Attempting to download from backup URL: \033[90;4m%s\033[0m",
+                get_text('attempt_download_from_backup_url'),
                 backup_url,
             )
             try:
@@ -679,7 +689,7 @@ class VPNList:
                 with open(file_path, "wb") as f:
                     f.write(data)
                 self.log.info(
-                    "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
+                    get_text('vpnlist_download_saved_to_file'), file_path
                 )
             except Exception as e:
                 self.log.error(
