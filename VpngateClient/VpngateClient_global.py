@@ -77,12 +77,15 @@ translations = {
     "en": {
         # info logger information
         "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] for Windows, Start running...\033[0m",
-        "vpnlist_expired": "VPN servers list expired,download now!",
-        "download_from_url": "Downloading VPN list from \033[90;4m%s\033[0m",
+        "vpnlist_expired": "\033[33mVPN servers list expired,download now!\033[0m",
+        "download_from_main_url": "Downloading VPN list from \033[90;4m%s\033[0m",
         "vpnlist_download_saved_to_file": "VPN list downloaded and saved to \033[90;4m%s\033[0m",
-        "failed_to_download_from_url": "Failed to download from %s: %s",
-        "failed_to_download_from_backup_url":  "Failed to download from backup URL %s: %s",
+        "failed_to_download_from_main_url": "\033[31mMain URL is unavailable, switch to backup URL!\033[0m",
+        "proxy_check_failed": "Proxy check failed for \033[4m%s\033[0m",
+        "available_GitHub_proxy": "\033[32mFound available GitHub proxy: \033[4m%s\033[0m",
+        "fallback_to_original_url": "No available proxy found, using original URL: \033[90;4m%s\033[0m",
         "attempt_download_from_backup_url": "Attempting to download from backup URL: \033[90;4m%s\033[0m",
+        "failed_to_download_from_backup_url": "Failed to download from backup URL too: \033[90;4m%s\033[0m",
         "loading_vpn_list": "Loading VPN list from \033[90;4m%s\033[0m",
         "found_vpn_servers": "Found \033[32m%i\033[0m VPN servers",
         "filtering_servers": "Filtering out unresponsive VPN servers",
@@ -134,12 +137,15 @@ translations = {
     "zh": {
         # info
         "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] VPNGATE Windows 客户端, 开始运行...\033[0m",
-        "vpnlist_expired": "VPN 服务器列表已过期，重新下载!",
-        "download_from_url": "从 \033[90;4m%s\033[0m 下载 VPN 服务器列表",
+        "vpnlist_expired": "\033[33mVPN 服务器列表已过期，重新下载!\033[0m",
+        "download_from_main_url": "从 \033[90;4m%s\033[0m 下载 VPN 服务器列表",
         "vpnlist_download_saved_to_file": "VPN 服务器列表已下载并保存到 \033[90;4m%s\033[0m",
-        "failed_to_download_from_url": "从 %s 下载失败！错误信息： %s",
-        "failed_to_download_from_backup_url":  "从备用地址 %s 也下载失败了！错误信息： %s",
+        "failed_to_download_from_main_url": "\033[31m主下载网址不可用，切换备用网址！\033[0m",
+        "proxy_check_failed": "GitHub 代理地址 \033[4m%s\033[0m 暂不可用！",
+        "available_GitHub_proxy": "\033[32m发现可用GitHub 代理: \033[4m%s\033[0m",
+        "fallback_to_original_url": "没有可用GitHub代理，使用原始网址: \033[90;4m%s\033[0m",
         "attempt_download_from_backup_url": "尝试从备用网址下载: \033[90;4m%s\033[0m",
+        "failed_to_download_from_backup_url": "从备用地址 \033[90;4m%s\033[0m 也下载失败了！",
         "loading_vpn_list": "从文件 \033[90;4m%s\033[0m 加载VPN服务器列表",
         "found_vpn_servers": "总共 \033[32m%i\033[0m 个 VPN 服务器",
         "filtering_servers": "过滤无响应服务器",
@@ -642,9 +648,37 @@ class VPNList:
         file_mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
         return datetime.now() - file_mod_time > timedelta(hours=self.args.expired_time)
 
+    # Check if proxy URL is available
+    def check_proxy(self, proxy_url):
+        try:
+            response = requests.get(proxy_url, timeout=3)
+            # If the status code is 200, it means that the proxy URL is available
+            return response.status_code == 200
+        except requests.RequestException as e:
+            # self.log.error(f"Proxy check failed for {proxy_url}: {e}")
+            self.log.error(get_text("proxy_check_failed"), proxy_url)
+            return False
+
+    # Returns the first available GitHub Proxy
+    def get_available_GitHub_proxy(self):
+        proxies = [
+            "https://ghproxy.net/",
+            "https://gh.llkk.cc/",
+            "https://ghp.ci/",
+            "https://ghproxy.cn/",
+            "https://github.akams.cn/",
+        ]
+
+        for proxy in proxies:
+            if self.check_proxy(proxy):
+                self.log.info(get_text("available_GitHub_proxy"), proxy)
+                return proxy
+
+        return None
+
     def download_vpn_list(self, url, file_path):
         """Download the VPN list from the given URL and save it to the specified file path."""
-        self.log.info(get_text("download_from_url"), url)
+        self.log.info(get_text("download_from_main_url"), url)
 
         try:
             # Download with proxy
@@ -660,12 +694,24 @@ class VPNList:
                 f.write(data)
             self.log.info(get_text("vpnlist_download_saved_to_file"), file_path)
         except Exception as e:
-            self.log.error(get_text("failed_to_download_from_url"), url, e)
-            backup_url = "https://ghp.ci/https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
-            self.log.info(
-                get_text("attempt_download_from_backup_url"),
-                backup_url,
-            )
+            self.log.error(get_text("failed_to_download_from_main_url"))
+            original_url = "https://raw.githubusercontent.com/sinspired/VpngateAPI/main/servers.csv"
+
+            # Check available proxies and set an alternate download address
+            available_proxy = self.get_available_GitHub_proxy()
+            if available_proxy:
+                backup_url = f"{available_proxy}{original_url}"
+                self.log.info(
+                    get_text("attempt_download_from_backup_url"),
+                    backup_url,
+                )
+            else:
+                self.log.info(
+                    get_text("fallback_to_original_url"),
+                    original_url,
+                )
+                backup_url = original_url
+
             try:
                 # Uninstall proxy
                 urllib.request.install_opener(None)
@@ -676,7 +722,7 @@ class VPNList:
                 self.log.info(get_text("vpnlist_download_saved_to_file"), file_path)
             except Exception as e:
                 self.log.error(
-                    get_text('failed_to_download_from_backup_url'), backup_url, e
+                    get_text("failed_to_download_from_backup_url"), backup_url
                 )
 
     def load_vpns(self, file_path):

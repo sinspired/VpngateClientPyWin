@@ -510,6 +510,34 @@ class VPNList:
         file_mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
         return datetime.now() - file_mod_time > timedelta(hours=self.args.expired_time)
 
+    # Check if proxy URL is available
+    def check_proxy(self, proxy_url):
+        try:
+            response = requests.get(proxy_url, timeout=3)
+            # If the status code is 200, it means that the proxy URL is available
+            return response.status_code == 200
+        except requests.RequestException as e:
+            # self.log.error(f"Proxy check failed for {proxy_url}: {e}")
+            self.log.error(f"Proxy check failed for {proxy_url}")
+            return False
+
+    # Returns the first available GitHub Proxy
+    def get_available_github_proxy(self):
+        proxies = [
+            "https://ghproxy.net/",
+            "https://gh.llkk.cc/",
+            "https://ghp.ci/",
+            "https://ghproxy.cn/",
+            "https://github.akams.cn/",
+        ]
+
+        for proxy in proxies:
+            if self.check_proxy(proxy):
+                self.log.info(f"Available GitHub Proxy: {proxy}")
+                return proxy
+
+        return None
+
     def download_vpn_list(self, url, file_path):
         """Download the VPN list from the given URL and save it to the specified file path."""
         self.log.info("Downloading VPN list from \033[90;4m%s\033[0m", url)
@@ -530,16 +558,29 @@ class VPNList:
                 "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
             )
         except Exception as e:
-            self.log.error("Failed to download from %s: %s", url, e)
-            backup_url = "https://ghp.ci/https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
-            self.log.info(
-                "Attempting to download from backup URL: \033[90;4m%s\033[0m",
-                backup_url,
-            )
+            # self.log.error("Failed to download from %s: %s", url, e)
+            self.log.error("Failed to download from \033[90;4m%s\033[0m", url)
+            original_url = "https://raw.githubusercontent.com/sinspired/VpngateAPI/main/servers.csv"
+
+            # Check available proxies and set an alternate download address
+            available_proxy = self.get_available_github_proxy()
+            if available_proxy:
+                backup_url = f"{available_proxy}{original_url}"
+                self.log.info(
+                    "Attempting to download from backup URL: \033[90;4m%s\033[0m",
+                    backup_url,
+                )
+            else:
+                self.log.info(
+                    "No available proxy found, using original URL: \033[90;4m%s\033[0m",
+                    original_url,
+                )
+                backup_url = original_url
+
             try:
                 # Uninstall proxy
                 urllib.request.install_opener(None)
-                req = urllib.request.urlopen(backup_url)
+                req = urllib.request.urlopen(backup_url,timeout=10)
                 data = req.read()
                 with open(file_path, "wb") as f:
                     f.write(data)
