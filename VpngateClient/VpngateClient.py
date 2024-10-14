@@ -531,7 +531,7 @@ class VPNList:
             )
         except Exception as e:
             self.log.error("Failed to download from %s: %s", url, e)
-            backup_url = "https://mirror.ghproxy.com/https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
+            backup_url = "https://ghp.ci/https://github.com/sinspired/VpngateAPI/blob/main/servers.csv"
             self.log.info(
                 "Attempting to download from backup URL: \033[90;4m%s\033[0m",
                 backup_url,
