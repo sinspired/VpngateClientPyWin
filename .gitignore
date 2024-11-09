@@ -22,6 +22,7 @@ debhelper-build-stamp
 *.substvars
 *.csv
 .vagrant
+debian
 debian/hello
 debian/files
 debian/vpngate-client/
