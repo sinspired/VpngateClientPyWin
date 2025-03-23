@@ -4,7 +4,6 @@ import argparse
 import base64
 import concurrent.futures
 import csv
-import datetime
 from datetime import datetime, timedelta
 import logging
 import os
@@ -545,7 +544,7 @@ class VPNList:
         try:
             # Download with proxy
             proxy = urllib.request.ProxyHandler(
-                {"http": "http://localhost:10809", "https": "https://localhost:10809"}
+                {"http": "http://localhost:10808", "https": "https://localhost:10808"}
             )
             opener = urllib.request.build_opener(proxy)
             urllib.request.install_opener(opener)

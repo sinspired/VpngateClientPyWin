@@ -7,6 +7,9 @@ build
 dist
 *test*.*
 .idea/
+.vs*/
+.venv/
+env/
 
 # https://github.com/phusion/debian-packaging-for-the-modern-developer/blob/master/.gitignore
 debhelper-build-stamp

@@ -4,7 +4,6 @@ import argparse
 import base64
 import concurrent.futures
 import csv
-import datetime
 from datetime import datetime, timedelta
 import logging
 import os
@@ -202,7 +201,7 @@ translations = {
 def get_system_language():
     try:
         return locale.getdefaultlocale()[0]
-    except:
+    except Exception:
         return "en_US"
 
 
@@ -394,7 +393,7 @@ class VPN:
                                 previous_stats = current_stats
                                 return False
                     except Exception as e:
-                        print("connection error:{e}")
+                        print(f"connection error:{e}")
                         return False
 
                 print(get_text("setup_finished"))
@@ -479,7 +478,6 @@ class VPN:
             while total_wait < self.args.vpn_timeout:
                 # 检查进程是否还活着
                 if proc.poll() is not None:
-                    # print("VPN initialization failed.")
                     print(get_text("vpn_init_failed"))
                     return False
 
@@ -491,7 +489,7 @@ class VPN:
                     if self.args.verbose:
                         print("\033[90m" + line.decode().strip() + "\033[0m")
                     if b"Initialization Sequence Completed" in line.strip():
-                        total_wait -= 5
+                        # total_wait -= 5
                         break
 
                 # 检查成功文件是否存在
@@ -507,7 +505,7 @@ class VPN:
                     proc.stdout.close()
                     return True
 
-                time.sleep(self.args.vpn_timeout_poll_interval)
+                # time.sleep(self.args.vpn_timeout_poll_interval)
                 total_wait += self.args.vpn_timeout_poll_interval
 
             self.log.warning(get_text("vpn_init_timeout"))
@@ -654,7 +652,7 @@ class VPNList:
             response = requests.get(proxy_url, timeout=3)
             # If the status code is 200, it means that the proxy URL is available
             return response.status_code == 200
-        except requests.RequestException as e:
+        except requests.RequestException:
             # self.log.error(f"Proxy check failed for {proxy_url}: {e}")
             self.log.error(get_text("proxy_check_failed"), proxy_url)
             return False
@@ -683,7 +681,7 @@ class VPNList:
         try:
             # Download with proxy
             proxy = urllib.request.ProxyHandler(
-                {"http": "http://localhost:10809", "https": "https://localhost:10809"}
+                {"http": "http://localhost:10808", "https": "https://localhost:10808"}
             )
             opener = urllib.request.build_opener(proxy)
             urllib.request.install_opener(opener)
@@ -693,7 +691,7 @@ class VPNList:
             with open(file_path, "wb") as f:
                 f.write(data)
             self.log.info(get_text("vpnlist_download_saved_to_file"), file_path)
-        except Exception as e:
+        except Exception:
             self.log.error(get_text("failed_to_download_from_main_url"))
             original_url = "https://raw.githubusercontent.com/sinspired/VpngateAPI/main/servers.csv"
 
@@ -720,7 +718,7 @@ class VPNList:
                 with open(file_path, "wb") as f:
                     f.write(data)
                 self.log.info(get_text("vpnlist_download_saved_to_file"), file_path)
-            except Exception as e:
+            except Exception:
                 self.log.error(
                     get_text("failed_to_download_from_backup_url"), backup_url
                 )
@@ -788,7 +786,7 @@ class VPNList:
                     if future.result():
                         responding.append(vpn)
 
-                except:
+                except Exception:
                     self.log.exception("Availability probe failed")
 
         self.log.info(get_text("found_responding_vpns"), len(responding))
@@ -803,8 +801,8 @@ def speedtest():
     FILESIZE = float(match.group(1))
 
     chunk_size = 4096  # 每次读取的块大小，单位为字节
-    duration = 5  # 测试持续时间，单位为秒
-    timeout = 20  # 请求超时时间，单位为秒
+    duration = 1  # 测试持续时间，单位为秒
+    timeout = 10  # 请求超时时间，单位为秒
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
@@ -839,7 +837,7 @@ def speedtest():
                 return 0
     except Exception as e:
         print(f"下载错误: {e}")
-        return 0.1
+        return 0.01
 
 
 def parse_args():
@@ -981,39 +979,62 @@ def vpn_list_main(args):
 def isAdmin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 
 def addOpenVPNtoSysPath():
-    # OpenVPN bin 目录路径
-    openvpn_bin_path = r"C:\Program Files\OpenVPN\bin"
-
-    # 检查目录是否存在
-    if os.path.exists(openvpn_bin_path):
-        # 获取当前环境变量 PATH
-        current_path = os.environ.get("PATH", "")
-
-        # 检查 bin 目录是否在 PATH 中
-        if openvpn_bin_path not in current_path:
-            # 将 bin 目录添加到 PATH
-            os.environ["PATH"] = f"{openvpn_bin_path};{current_path}"
-            print(f"{openvpn_bin_path} 已添加到 PATH 环境变量中。")
-
-            # 如果需要将修改后的 PATH 持久化，可以使用以下代码
-            if sys.platform == "win32":
-                import winreg
-
-                def set_environment_variable(name, value):
-                    with winreg.OpenKey(
-                        winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE
-                    ) as key:
-                        winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, value)
-
-                set_environment_variable("PATH", os.environ["PATH"])
-                print("Environment PATH updated and add to Rigistry。")
+    """Add OpenVPN binary path to system PATH environment variable."""
+    if sys.platform == "win32":
+        # Windows paths
+        openvpn_paths = [
+            r"C:\Program Files\OpenVPN\bin",
+            r"C:\Program Files (x86)\OpenVPN\bin",
+        ]
     else:
-        print(f"{openvpn_bin_path} doesn't exist,please install OpenVPN.")
+        # Linux/macOS paths
+        openvpn_paths = [
+            "/usr/sbin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/usr/local/bin",
+        ]
+
+    # Get current PATH
+    current_path = os.environ.get("PATH", "")
+    path_separator = ";" if sys.platform == "win32" else ":"
+    current_paths = current_path.split(path_separator)
+
+    for openvpn_path in openvpn_paths:
+        if os.path.exists(openvpn_path) and openvpn_path not in current_paths:
+            # Add OpenVPN path to PATH
+            os.environ["PATH"] = f"{openvpn_path}{path_separator}{current_path}"
+            print(f"Added {openvpn_path} to PATH environment variable.")
+
+            # Persist PATH changes on Windows
+            if sys.platform == "win32":
+                try:
+                    import winreg
+                    with winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER,
+                        "Environment",
+                        0,
+                        winreg.KEY_SET_VALUE
+                    ) as key:
+                        winreg.SetValueEx(
+                            key,
+                            "PATH",
+                            0,
+                            winreg.REG_EXPAND_SZ,
+                            os.environ["PATH"]
+                        )
+                    print("Environment PATH updated in Registry.")
+                except Exception as e:
+                    print(f"Failed to update Registry: {e}")          
+            return True
+
+    print("\033[33mWarning: OpenVPN installation not found in standard paths.\033[0m")
+    return False
 
 
 def customLogger():
