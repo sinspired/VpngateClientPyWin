@@ -473,6 +473,7 @@ class VPN:
         return command, success_file, batch_file, statusFile
 
     def wait_for_vpn_ready(self, proc, success_file, batch_file, conffileName):
+        # todo: 超时计算存在错误，待修复
         total_wait = 0
         try:
             while total_wait < self.args.vpn_timeout:
@@ -505,7 +506,7 @@ class VPN:
                     proc.stdout.close()
                     return True
 
-                # time.sleep(self.args.vpn_timeout_poll_interval)
+                time.sleep(self.args.vpn_timeout_poll_interval)
                 total_wait += self.args.vpn_timeout_poll_interval
 
             self.log.warning(get_text("vpn_init_timeout"))
