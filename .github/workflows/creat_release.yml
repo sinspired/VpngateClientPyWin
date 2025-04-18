@@ -41,16 +41,14 @@ jobs:
           PYTHON_VERSION: "3.x" # 显式设置 Python 版本
         run: |
           python -m pip install --upgrade pip
-          python -m venv venv  # 创建虚拟环境
-          source venv/bin/activate  # 激活虚拟环境
-          pip install console request
+          # pip install -r requirements.txt
+          pip install console requests
           pip install -U pyinstaller
         shell: bash
 
       - name: Build executables (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          source venv/bin/activate  # 激活虚拟环境
           pyinstaller --onefile --name VpngateClient-Linux-x64 --icon VpngateClient/logo.png VpngateClient/VpngateClient.py
           mv "dist/VpngateClient" "dist/VpngateClient-Linux-x64"
           zip -j "VpngateClient-Linux-x64.zip" dist/*-Linux-x64
