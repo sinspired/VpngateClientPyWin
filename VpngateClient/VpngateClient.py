@@ -20,7 +20,6 @@ import time
 import urllib.request
 import warnings
 from datetime import datetime, timedelta
-from encodings import base64_codec
 
 import console
 import requests

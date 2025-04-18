@@ -32,11 +32,6 @@ jobs:
           python-version: "3.x"
           cache: "pip"
 
-      - name: Debug requirements file
-        run: |
-          echo "Contents of requirements.txt:"
-          cat requirements.txt
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -47,7 +42,8 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           pyinstaller --onefile --name VpngateClient-Linux-x64 --icon VpngateClient/logo.png VpngateClient/VpngateClient.py
-          zip -j "VpngateClient-Linux-x64.zip" dist/VpngateClient-Linux-x64
+          mv "dist/VpngateClient" "dist/VpngateClient-Linux-x64"
+          zip -j "VpngateClient-Linux-x64.zip" dist/*-Linux-x64
 
       - name: Build executables (Windows)
         if: matrix.os == 'windows-latest'
@@ -56,14 +52,16 @@ jobs:
               Remove-Item -Recurse -Force "dist"
           }
           pyinstaller --onefile --uac-admin --name VpngateClient-Windows-x64 -i VpngateClient\logo.ico VpngateClient\VpngateClient.py
-          Compress-Archive -Path dist\VpngateClient-Windows-x64.exe -DestinationPath "VpngateClient-Windows-x64.zip"
+          Move-Item "dist\VpngateClient.exe" "dist\VpngateClient-Windows-x64.exe"
+          Compress-Archive -Path dist\*-Windows-x64.exe -DestinationPath "VpngateClient-Windows-x64.zip"
         shell: pwsh
 
       - name: Build executables (macOS)
         if: matrix.os == 'macos-latest'
         run: |
           pyinstaller --onefile --name VpngateClient-macOS-x64 --icon VpngateClient/logo.icns VpngateClient/VpngateClient.py
-          zip -j "VpngateClient-macOS-x64.zip" dist/VpngateClient-macOS-x64
+          mv "dist/VpngateClient" "dist/VpngateClient-macOS-x64"
+          zip -j "VpngateClient-macOS-x64.zip" dist/*-macOS-x64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
