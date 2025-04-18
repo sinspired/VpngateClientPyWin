@@ -1,140 +1,69 @@
-name: Build and Release
+name: Build VpngateClient Executables
+
 on:
   push:
     tags:
-      - "v*"
-  release:
-    types: [created]
+      #- 'v*'   # 如 v1.0.0 推送 tag 时触发
 
 jobs:
-  build-and-release:
+  build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          - os: ubuntu-22.04
-            platform: Linux
-          - os: windows-latest
-            platform: Windows
-          - os: macos-latest
-            platform: macOS
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
+        os: [windows-latest, ubuntu-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
-          # cache: "pip"
-
-      - name: Clear pip cache
-        run: |
-          python -m pip cache purge
+          python-version: '3.12'
 
       - name: Install dependencies
-        env:
-          PYTHON_VERSION: "3.x" # 显式设置 Python 版本
         run: |
           python -m pip install --upgrade pip
-          # pip install -r requirements.txt
-          pip install console requests
-          pip install -U pyinstaller
+          pip install -r VpngateClient/requirements.txt pyinstaller
         shell: bash
 
-      - name: Build executables (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Build Executable
         run: |
-          pyinstaller --onefile --name VpngateClient-Linux-x64 --icon VpngateClient/logo.png VpngateClient/VpngateClient.py
-          mv "dist/VpngateClient" "dist/VpngateClient-Linux-x64"
-          zip -j "VpngateClient-Linux-x64.zip" dist/*-Linux-x64
+          mkdir -p dist-out
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            pyinstaller --onefile --uac-admin --name VpngateClient-Windows-x64 -i VpngateClient/logo.ico VpngateClient/VpngateClient.py
+            mv dist/VpngateClient-Windows-x64.exe dist-out/
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            pyinstaller --onefile --windowed --name VpngateClient-macOS-x64 -i VpngateClient/logo.icns VpngateClient/VpngateClient.py
+            mv dist/VpngateClient-macOS-x64 dist-out/
+          else
+            pyinstaller --onefile --windowed --name VpngateClient-Linux-x64 -i VpngateClient/logo.png VpngateClient/VpngateClient.py
+            mv dist/VpngateClient-Linux-x64 dist-out/
+          fi
+        shell: bash
 
-      - name: Build executables (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          if (Test-Path -Path "dist") {
-              Remove-Item -Recurse -Force "dist"
-          }
-          pyinstaller --onefile --uac-admin --name VpngateClient-Windows-x64 -i VpngateClient\logo.ico VpngateClient\VpngateClient.py
-          Move-Item "dist\VpngateClient.exe" "dist\VpngateClient-Windows-x64.exe"
-          Compress-Archive -Path dist\*-Windows-x64.exe -DestinationPath "VpngateClient-Windows-x64.zip"
-        shell: pwsh
-
-      - name: Build executables (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          pyinstaller --onefile --name VpngateClient-macOS-x64 --icon VpngateClient/logo.icns VpngateClient/VpngateClient.py
-          mv "dist/VpngateClient" "dist/VpngateClient-macOS-x64"
-          zip -j "VpngateClient-macOS-x64.zip" dist/*-macOS-x64
-
-      - name: Upload artifacts
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}-executables
-          path: VpngateClient-${{ matrix.platform }}-x64.zip
+          name: built-${{ runner.os }}
+          path: dist-out/*
 
-  create-release:
-    needs: build-and-release
+  release:
+    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-      - name: Get tag description
-        id: tag_description
-        run: |
-          TAG_DESCRIPTION=$(git tag -l --format='%(contents)' ${{ github.ref_name }})
-          echo "tag_description=${TAG_DESCRIPTION}" >> $GITHUB_OUTPUT
-        shell: bash
+      - name: Display built structure
+        run: ls -R artifacts
 
-      - name: Get latest commit message
-        id: commit_message
-        run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          echo "commit_message=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Check existing release
-        id: check_release
-        run: |
-          if gh release view ${{ github.ref_name }} &> /dev/null; then
-            echo "release_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "release_exists=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: artifacts/**/*  # 上传所有平台构建产物
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Delete existing release
-        if: steps.check_release.outputs.release_exists == 'true'
-        run: |
-          gh release delete ${{ github.ref_name }} --yes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create ${{ github.ref_name }} \
-            --title "${{ github.ref_name }} ${{ steps.tag_description.outputs.tag_description }}" \
-            --notes "Release for ${{ github.ref_name }}
-
-          Changes in this release:
-          ${{ steps.commit_message.outputs.commit_message }}" \
-            --draft=false \
-            **/VpngateClient-Linux-x64.zip \
-            **/VpngateClient-Windows-x64.zip \
-            **/VpngateClient-macOS-x64.zip
-        shell: bash
