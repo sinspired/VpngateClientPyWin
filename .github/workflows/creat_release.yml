@@ -3,70 +3,127 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types: [created]
 
 jobs:
   build-and-release:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+          - os: windows-latest
+            platform: Windows
+          - os: macos-latest
+            platform: macOS
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('**\requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install future-fstrings
-          pip install pyinstaller
+          pip install -U pyinstaller
 
-      - name: Build executable
+      - name: Build executables (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          # pyinstaller --hidden-import=console.detection --onefile --uac-admin VpngateClient\VpngateClient.py
-          pyinstaller --onefile --uac-admin -i VpngateClient\logo.ico VpngateClient\VpngateClient.py
-          pyinstaller --onefile --uac-admin -i VpngateClient\logo.ico VpngateClient\VpngateClient_global.py
-          dir dist
+          pyinstaller --onefile --name VpngateClient-Linux-x64 --icon VpngateClient/logo.png VpngateClient/VpngateClient.py
+          zip -j "VpngateClient-Linux-x64.zip" dist/VpngateClient-Linux-x64
 
-      - name: Get tag info
-        id: get_tag_info
+      - name: Build executables (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          if (Test-Path -Path "dist") {
+              Remove-Item -Recurse -Force "dist"
+          }
+          pyinstaller --onefile --uac-admin --name VpngateClient-Windows-x64 -i VpngateClient\logo.ico VpngateClient\VpngateClient.py
+          Compress-Archive -Path dist\VpngateClient-Windows-x64.exe -DestinationPath "VpngateClient-Windows-x64.zip"
         shell: pwsh
-        run: |
-          $tag = git describe --tags --abbrev=0
-          echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
-          $tagMessage = git tag -l --format='%(contents)' $LATEST_TAG
-          echo "TAG_MESSAGE=$tagMessage" >> $env:GITHUB_ENV
 
-      - name: Delete old release
+      - name: Build executables (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          pyinstaller --onefile --name VpngateClient-macOS-x64 --icon VpngateClient/logo.icns VpngateClient/VpngateClient.py
+          zip -j "VpngateClient-macOS-x64.zip" dist/VpngateClient-macOS-x64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-executables
+          path: VpngateClient-${{ matrix.platform }}-x64.zip
+
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Get tag description
+        id: tag_description
+        run: |
+          TAG_DESCRIPTION=$(git tag -l --format='%(contents)' ${{ github.ref_name }})
+          echo "tag_description=${TAG_DESCRIPTION}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Get latest commit message
+        id: commit_message
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "commit_message=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Check existing release
+        id: check_release
+        run: |
+          if gh release view ${{ github.ref_name }} &> /dev/null; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete existing release
+        if: steps.check_release.outputs.release_exists == 'true'
         run: |
-          gh release delete ${{ env.LATEST_TAG }} -y --cleanup-tag
-        continue-on-error: true
+          gh release delete ${{ github.ref_name }} --yes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ./dist/vpngateclient.exe
-            ./dist/vpngateclient_global.exe
-          name: "VPNGate Client ${{ env.LATEST_TAG }}"
-          body: |
-            Release of VPNGate Client ${{ env.LATEST_TAG }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "${{ github.ref_name }} ${{ steps.tag_description.outputs.tag_description }}" \
+            --notes "Release for ${{ github.ref_name }}
 
-            ${{ env.TAG_MESSAGE }}
-          tag_name: ${{ env.LATEST_TAG }}
+          Changes in this release:
+          ${{ steps.commit_message.outputs.commit_message }}" \
+            --draft=false \
+            **/VpngateClient-Linux-x64.zip \
+            **/VpngateClient-Windows-x64.zip \
+            **/VpngateClient-macOS-x64.zip
+        shell: bash
