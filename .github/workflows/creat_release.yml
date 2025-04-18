@@ -37,10 +37,13 @@ jobs:
           python -m pip cache purge
 
       - name: Install dependencies
+        env:
+          PYTHON_VERSION: "3.x" # 显式设置 Python 版本
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -U pyinstaller
+        shell: bash
 
       - name: Build executables (Linux)
         if: matrix.os == 'ubuntu-latest'
