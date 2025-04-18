@@ -1,3 +1,2 @@
-console==0.9911
 Requests==2.32.3
 setuptools==78.1.0
