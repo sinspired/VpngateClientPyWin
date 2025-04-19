@@ -4,10 +4,13 @@ import argparse
 import base64
 import concurrent.futures
 import csv
-from datetime import datetime, timedelta
+import ctypes
+import locale
 import logging
 import os
 import platform
+import re
+import requests
 import shutil
 import signal
 import socket
@@ -16,10 +19,18 @@ import sys
 import tempfile
 import time
 import urllib.request
-import ctypes
-import console
-import requests
-import re
+import warnings
+from datetime import datetime, timedelta
+
+
+if platform.system() == "Windows":
+    # 支持 ansi 颜色
+    try:
+        import colorama
+
+        colorama.init()
+    except ImportError:
+        print("Warning: colorama module not found. ANSI colors may not work properly.")
 
 # The URL for the VPN list
 VPN_LIST_URL = "https://www.vpngate.net/api/iphone/"
@@ -28,9 +39,8 @@ LOCAL_CSV_PATH = "servers.csv"
 # LOCAL_CSV_PATH = "list.csv"
 DEFAULT_EXPIRED_TIME = 8
 DEFAULT_MIN_SPEED = 0.1
+is_linux = platform.system() == "Linux"
 
-# Support Ansi
-console.ansi_capable
 
 logger = logging.getLogger()
 
@@ -69,6 +79,249 @@ EU_COUNTRIES = [
     "SI",
 ]
 
+# 新增：翻译字典
+translations = {
+    "en": {
+        # info logger information
+        "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] for Windows, Start running...\033[0m",
+        "vpnlist_expired": "\033[33mVPN servers list expired,download now!\033[0m",
+        "download_from_main_url": "Downloading VPN list from \033[90;4m%s\033[0m",
+        "vpnlist_download_saved_to_file": "VPN list downloaded and saved to \033[90;4m%s\033[0m",
+        "failed_to_download_from_main_url": "\033[31mMain URL is unavailable, switch to backup URL!\033[0m",
+        "proxy_check_failed": "Proxy check failed for \033[4m%s\033[0m",
+        "available_GitHub_proxy": "\033[32mFound available GitHub proxy: \033[4m%s\033[0m",
+        "fallback_to_original_url": "No available proxy found, using original URL: \033[90;4m%s\033[0m",
+        "attempt_download_from_backup_url": "Attempting to download from backup URL: \033[90;4m%s\033[0m",
+        "failed_to_download_from_backup_url": "Failed to download from backup URL too: \033[90;4m%s\033[0m",
+        "file_path_not_found": "File path not found: \033[90;4m%s\033[0m",
+        "get_vpnlist_with_backup_proxy": "Get VPN list with backup proxy: \033[90;4m%s\033[0m",
+        "loading_vpn_list": "Loading VPN list from \033[90;4m%s\033[0m",
+        "found_vpn_servers": "Found \033[32m%i\033[0m VPN servers",
+        "filtering_servers": "Filtering out unresponsive VPN servers",
+        "found_responding_vpns": "Found \033[32m%i\033[0m responding VPNs",
+        "vpn_init_success": "VPN initialized successfully! Country: %s",
+        "bad_download_speed": "\033[33mBad download speed,attempting next server...\033[0m",
+        "next_vpn": "Next VPN...",
+        "performing_speedtest": "\033[90mPerforming connection speed test. Press CTRL+C to stop it.\033[0m",
+        "speedtest_canceled": "Speedtest Canceled!",
+        "use_or_change": "Would you like to use this VPN ? (No = \033[1mCTRL+C\033[0m, Yes = Any Key)",
+        "setup_finished": "\033[32mSetup finished!\033[0m \033[90m(Press CTRL+C to stop the VPN)\033[0m",
+        "connection_disconnected": "\033[33mConnection is disconnected,attempting next server!\033[0m",
+        "connection_closed": "\033[90mip %s port %s country %s,connection closed!\033[0m",
+        "connecting_to_vpn": "Connecting to VPN...",
+        "writing_config": "Writing config to %s",
+        "executing_cmd": "Executing %s",
+        "vpn_init_failed": "VPN initialization failed.",
+        "vpn_init_timeout": "VPN Initialization timed out.",
+        "received_keyboard_interrupt": "\033[31mReceived keyboard interrupt.\033[0m",
+        "terminating_vpn": "Terminating VPN connection",
+        "vpn_terminated": "VPN connection Terminated!",
+        "termination_timeout": "Termination timed out. Killing the process.",
+        "vpn_unkillable": "The VPN process can't be killed!",
+        "exiting": "\033[31mExiting...\033[0m",
+        # debug输出
+        "probing_vpn": "Probing VPN endpoint",
+        "cant_probe_udp": "Can't probe UDP servers",
+        "vpn_not_responding": "VPN endpoint did not respond to connection",
+        "connection_failed": "Connection failed",
+        "vpn_listening": "VPN endpoint is listening",
+        # help info
+        "appDescription": "Client for vpngate.net VPNs",
+        "positional_arguments": "positional arguments",
+        "optional_arguments": "options",
+        "h_help": "show this help message and exit",
+        "h_arg_country": "A 2 char country code (e.g. CA for Canada) from which to look for VPNs. If specified multiple times, VPNs from all the countries will be selected.",
+        "h_arg_eu": "Adds European countries to the list of considerable countries.",
+        "h_arg_probes": "Number of concurrent connection probes to send.",
+        "h_arg_probe_timeout": "When probing, how long to wait for connection until marking the VPN as unavailable (milliseconds).",
+        "h_arg_url": "URL of the VPN list (csv).",
+        "h_arg_us": "Adds United States to the list of possible countries. Shorthand or --country US.",
+        "h_arg_verbose": "More verbose output.",
+        "h_arg_vpn_timeout": "Time to wait for a VPN to be established before giving up (seconds).",
+        "h_arg_vpn_timeout_poll_interval": "Time between two checks for a potential timeout (seconds).",
+        "h_arg_ovpnfile": "Connects to the OpenVPN VPN whose configuration is in the provided .ovpn file.",
+        "h_arg_expired_time": "Time to wait for a ServersList to be expired.",
+        "h_arg_min_speed": "Minimum download speed.",
+    },
+    "zh": {
+        # info
+        "vpn_start_running": "\033[2J\033[H\033[32m[VPNGATE-CLIENT] VPNGATE Windows 客户端, 开始运行...\033[0m",
+        "vpnlist_expired": "\033[33mVPN 服务器列表已过期，重新下载!\033[0m",
+        "download_from_main_url": "从 \033[90;4m%s\033[0m 下载 VPN 服务器列表",
+        "vpnlist_download_saved_to_file": "VPN 服务器列表已下载并保存到 \033[90;4m%s\033[0m",
+        "failed_to_download_from_main_url": "\033[31m主下载网址不可用，切换备用网址！\033[0m",
+        "proxy_check_failed": "GitHub 代理地址 \033[4m%s\033[0m 暂不可用！",
+        "available_GitHub_proxy": "\033[32m发现可用GitHub 代理: \033[4m%s\033[0m",
+        "fallback_to_original_url": "没有可用GitHub代理，使用原始网址: \033[90;4m%s\033[0m",
+        "attempt_download_from_backup_url": "尝试从备用网址下载: \033[90;4m%s\033[0m",
+        "failed_to_download_from_backup_url": "从备用地址 \033[90;4m%s\033[0m 也下载失败了！",
+        "file_path_not_found": "文件路径不存在: \033[90;4m%s\033[0m",
+        "get_vpnlist_with_backup_proxy": "使用备用代理获取 VPN 服务器列表: \033[90;4m%s\033[0m",
+        "loading_vpn_list": "从文件 \033[90;4m%s\033[0m 加载VPN服务器列表",
+        "found_vpn_servers": "总共 \033[32m%i\033[0m 个 VPN 服务器",
+        "filtering_servers": "过滤无响应服务器",
+        "found_responding_vpns": "发现 \033[32m%i\033[0m 个可用 VPN 服务器",
+        "vpn_init_success": "VPN初始化成功！国家：%s",
+        "performing_speedtest": "\033[90m运行 VPN 连接速度测试，按 CTRL+C 终止测速.\033[0m",
+        "speedtest_canceled": "下载速度测试取消!",
+        "bad_download_speed": "下载速度不佳，尝试下一个服务器...",
+        "next_vpn": "下一个VPN...",
+        "use_or_change": "是否使用此 VPN ? ( 按任意键确认！ 按 \033[1mCTRL+C\033[0m 切换VPN！)",
+        "setup_finished": "\033[32mVPN 链接设置完成!\033[0m \033[90m(按 CTRL+C 结束连接并退出)\033[0m",
+        "connection_disconnected": "连接已断开，尝试下一个服务器！",
+        "connection_closed": "IP %s 端口 %s 国家 %s，连接已关闭！",
+        "connecting_to_vpn": "正在连接VPN...",
+        "writing_config": "正在将配置写入 %s",
+        "executing_cmd": "执行命令 %s",
+        "vpn_init_failed": "VPN初始化失败。",
+        "vpn_init_timeout": "VPN初始化超时。",
+        "received_keyboard_interrupt": "收到键盘中断。",
+        "terminating_vpn": "正在终止VPN连接",
+        "vpn_terminated": "VPN连接已终止！",
+        "termination_timeout": "终止超时。正在强制结束进程。",
+        "vpn_unkillable": "无法终止VPN进程！",
+        "exiting": "\033[31m退出程序...\033[0m",
+        # debug
+        "probing_vpn": "正在探测VPN端点",
+        "cant_probe_udp": "无法探测UDP服务器",
+        "vpn_not_responding": "VPN端点未响应连接",
+        "connection_failed": "连接失败",
+        "vpn_listening": "VPN端点正在监听",
+        # 帮助信息
+        "appDescription": "vpngate.net 的VPN客户端",
+        # 'appUsage': '用法: vpngateclientcn.py [选项] [ovpnfile]',
+        "positional_arguments": "位置参数",
+        "optional_arguments": "可选参数",
+        "h_help": "显示此帮助信息并退出",
+        "h_arg_country": "指定一个两位字母的国家代码（例如 CA 代表加拿大），用于选择 VPN。可多次指定多个国家的 VPN。",
+        "h_arg_eu": "将欧洲国家添加到可考虑的国家列表中。",
+        "h_arg_probes": "发送的并发连接探测数量。",
+        "h_arg_probe_timeout": "探测时，等待连接的时间，超时后标记该 VPN 为不可用（以毫秒为单位）。",
+        "h_arg_url": "VPN 列表的 URL（csv）。",
+        "h_arg_us": "将美国添加到可能的国家列表中。简写为 --country US。",
+        "h_arg_verbose": "输出更多详细信息。",
+        "h_arg_vpn_timeout": "等待 VPN 建立连接的时间，超时后放弃（以秒为单位）。",
+        "h_arg_vpn_timeout_poll_interval": "两次检查潜在超时的时间间隔（以秒为单位）。",
+        "h_arg_ovpnfile": "连接到 OpenVPN 的 VPN，其配置文件为提供的 .ovpn 文件。",
+        "h_arg_expired_time": "等待服务器列表过期的时间。",
+        "h_arg_min_speed": "最低下载速度。",
+    },
+}
+
+
+# 获取系统语言的函数
+def get_system_language():
+    try:
+        return locale.getdefaultlocale()[0]
+    except Exception:
+        return "en_US"
+
+
+# 获取翻译文本的函数
+def get_text(key, lang=None):
+    # 忽略 locale.getdefaultlocale() 的弃用警告
+    warnings.filterwarnings(
+        "ignore", category=DeprecationWarning, message=".*getdefaultlocale.*"
+    )
+
+    if lang is None:
+        lang = get_system_language()[:2]
+    return translations.get(lang, translations["en"]).get(key, translations["en"][key])
+
+
+# Commands for guarding IPv4 traffic against non-VPN leakage
+IPv4_COMMANDS = [
+    # accept connections to loopback device
+    ["iptables", "--append", "INPUT", "--in-interface", "lo", "--jump", "ACCEPT"],
+    # accept connections from loopback device
+    ["iptables", "--append", "OUTPUT", "--out-interface", "lo", "--jump", "ACCEPT"],
+    # allow outbound broadcasts for dhcp traffic
+    [
+        "iptables",
+        "--append",
+        "OUTPUT",
+        "--destination",
+        "255.255.255.255",
+        "--jump",
+        "ACCEPT",
+    ],
+    # allow inbound broadcasts for dhcp traffic
+    [
+        "iptables",
+        "--append",
+        "INPUT",
+        "--source",
+        "255.255.255.255",
+        "--jump",
+        "ACCEPT",
+    ],
+    # allow inbound traffic from local network
+    [
+        "iptables",
+        "--append",
+        "INPUT",
+        "--source",
+        "192.168.0.0/16",
+        "--destination",
+        "192.168.0.0/16",
+        "--jump",
+        "ACCEPT",
+    ],
+    # allow outbound traffic to local network
+    [
+        "iptables",
+        "--append",
+        "OUTPUT",
+        "--source",
+        "192.168.0.0/16",
+        "--destination",
+        "192.168.0.0/16",
+        "--jump",
+        "ACCEPT",
+    ],
+    # allow packets to be forwarded from tun0 to other interfaces
+    ["iptables", "--append", "FORWARD", "--out-interface", "tun+", "--jump", "ACCEPT"],
+    # allow packets to be forwarded from any interface to tun0
+    ["iptables", "--append", "FORWARD", "--in-interface", "tun+", "--jump", "ACCEPT"],
+    # handle nated packets correctly
+    [
+        "iptables",
+        "--table",
+        "nat",
+        "--append",
+        "POSTROUTING",
+        "--out-interface",
+        "tun+",
+        "--jump",
+        "MASQUERADE",
+    ],
+    # drop packets not going to the VPN IP
+    [
+        "iptables",
+        "--append",
+        "OUTPUT",
+        "!",
+        "--out-interface",
+        "tun+",
+        "!",
+        "--destination",
+        "<IP>",
+        "--jump",
+        "DROP",
+    ],
+]
+
+# Commands for blocking all ipv6 traffic; the VPNs don't support the
+# protocol.
+IPv6_COMMANDS = [
+    # drop inbound ipv6 packets
+    ["ip6tables", "-P", "INPUT", "DROP"],
+    # drop outbound ipv6 packets
+    ["ip6tables", "-P", "OUTPUT", "DROP"],
+    # drop forwarded ipv6 packets
+    ["ip6tables", "-P", "FORWARD", "DROP"],
+]
+
 
 class VPN:
     """A VPN server."""
@@ -78,7 +331,7 @@ class VPN:
         self.args = args
 
         # Logging
-        self.log = logging.getLogger("VPN: %s" % data["#HostName"])
+        self.log = logging.getLogger("VPN %s" % data["#HostName"])
 
         # VPN Information
         self.ip = data["IP"]
@@ -120,10 +373,10 @@ class VPN:
         """Probes the VPN endpoint to see if it's listening."""
         if self.proto == "udp":
             # TODO: Implement udp probing.
-            self.log.debug("Can't probe UDP servers")
+            self.log.debug(get_text("cant_probe_udp"))
             return True
 
-        self.log.debug("Probing VPN endpoint")
+        self.log.debug(get_text("probing_vpn"))
 
         # Create a socket with a timeout.
         s = socket.socket()
@@ -135,13 +388,13 @@ class VPN:
             s.shutdown(socket.SHUT_RDWR)
             s.close()
         except socket.timeout:
-            self.log.debug("VPN endpoint did not respond to connection")
+            self.log.debug(get_text("vpn_not_responding"))
             return False
         except (ConnectionRefusedError, OSError):
-            self.log.debug("Connection failed")
+            self.log.debug(get_text("connection_failed"))
             return False
 
-        self.log.debug("VPN endpoint is listening")
+        self.log.debug(get_text("vpn_listening"))
         return True
 
     def connect(self):
@@ -155,9 +408,9 @@ class VPN:
             (KeyboardInterrupt) if the process was aborted by the user.
         """
 
-        self.log.info("Connecting to VPN...")
+        self.log.info(get_text("connecting_to_vpn"))
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as conf:
-            self.log.debug("Writing config to %s", conf.name)
+            self.log.debug(get_text("writing_config"), conf.name)
             conf.write(self.config)
             # Add the data-ciphers option to the configuration
             conf.write("\ndata-ciphers AES-128-CBC\n")
@@ -170,7 +423,7 @@ class VPN:
             cmd, success_file, batch_file, statusFile = self.build_ovpn_command(
                 conf.name
             )
-            self.log.debug("Executing %s", cmd)
+            self.log.debug(get_text("executing_cmd"), cmd)
             # os.remove(conf.name)
             with subprocess.Popen(
                 cmd,
@@ -191,7 +444,7 @@ class VPN:
 
                 # Perform a speedtest on the VPN
                 if not self.speedtest():
-                    print("\033[33mBad download speed,attempting next server...\033[0m")
+                    print(get_text("bad_download_speed"))
                     self.terminate_vpn(proc)
                     os.remove(conf.name)
                     os.remove(statusFile)
@@ -199,7 +452,7 @@ class VPN:
 
                 # Ask the user if she wishes to use this VPN.
                 if not self.prompt_use_vpn():
-                    print("\033[33mNext VPN...\033[0m")
+                    print("\033[33m" + get_text("next_vpn") + "\033[0m")
                     self.terminate_vpn(proc)
                     os.remove(conf.name)
                     os.remove(statusFile)
@@ -246,12 +499,14 @@ class VPN:
                                 previous_stats = current_stats
                                 return False
                     except Exception as e:
-                        print("connection error:{e}")
+                        print(f"connection error:{e}")
                         return False
 
-                print(
-                    "\033[32mSetup finished!\033[0m \033[90m(Press CTRL+C to stop the VPN)\033[0m"
-                )
+                print(get_text("setup_finished"))
+
+                # linux系统设置防火墙
+                if self.args.iptables and is_linux:
+                    self.setup_iptables_rules()
 
                 try:
                     # Check statusFile an wait to keyboardinterrrupt
@@ -263,21 +518,23 @@ class VPN:
                             self.terminate_vpn(proc)
                             os.remove(conf.name)
                             os.remove(statusFile)
-                            print(
-                                "\033[33mConnection is disconnected,attempting next server!\033[0m"
-                            )
+                            if self.args.iptables and is_linux:
+                                self.clear_iptables_rules()
+                            print(get_text("connection_disconnected"))
                             return False
 
                 except KeyboardInterrupt:
-                    self.log.info("\033[31mReceived keyboard interrupt.\033[0m")
+                    self.log.info(get_text("received_keyboard_interrupt"))
                     self.terminate_vpn(proc)
                     os.remove(conf.name)
                     os.remove(statusFile)
+                    if self.args.iptables and is_linux:
+                        self.clear_iptables_rules()
                     sys.exit(0)
 
                 finally:
                     print(
-                        "\033[90mip %s port %s country %s,connection closed!\033[0m"
+                        get_text("connection_closed")
                         % (self.ip, self.port, self.country_code)
                     )
 
@@ -288,19 +545,19 @@ class VPN:
 
         statusFile = os.path.join(temp_dir, f"vpn_status_{pid}.tmp")
 
+        # 创建一个批处理文件来标记 VPN 连接成功并终止进程
+        batch_file = os.path.join(temp_dir, f"vpn_success_{pid}")
+        with open(batch_file, "w") as f:
+            f.write("@echo off\n")
+            f.write(f'echo. > "{success_file}"\n')
+            f.flush()
+            f.close()
+
         if platform.system() == "Windows":
-            # 创建一个批处理文件来标记 VPN 连接成功并终止进程
-            batch_file = os.path.join(temp_dir, f"vpn_success_and_kill_{pid}.bat")
-            with open(batch_file, "w") as f:
-                f.write("@echo off\n")
-                f.write(f'echo. > "{success_file}"\n')
-                # f.write(f'taskkill /PID {pid}\n')
-                f.flush()
-                f.close()
             up = batch_file
         else:
             # 对于非 Windows 系统，我们仍然使用 SIGUSR1
-            up = f"kill -USR1 {pid}"
+            up = "/bin/kill -USR1 %i" % pid
 
         command = [
             "openvpn",
@@ -330,13 +587,13 @@ class VPN:
         return command, success_file, batch_file, statusFile
 
     def wait_for_vpn_ready(self, proc, success_file, batch_file, conffileName):
+        # todo: 超时计算存在错误，待修复
         total_wait = 0
-
         try:
             while total_wait < self.args.vpn_timeout:
                 # 检查进程是否还活着
                 if proc.poll() is not None:
-                    print("VPN initialization failed.")
+                    print(get_text("vpn_init_failed"))
                     return False
 
                 # 非阻塞读取进程输出
@@ -345,17 +602,19 @@ class VPN:
                     if not line:
                         break
                     if self.args.verbose:
-                        print(line.decode().strip())
+                        print("\033[90m" + line.decode().strip() + "\033[0m")
                     if b"Initialization Sequence Completed" in line.strip():
-                        total_wait -= 5
+                        # total_wait -= 5
                         break
 
                 # 检查成功文件是否存在
                 if os.path.exists(success_file):
                     print(
-                        "\033[2J\033[H\033[0m\033[32mVPN initialized successfully! Country: %s\033[0m"
-                        % (self.country_code)
+                        "\033[2J\033[H\033[0m\033[32m"
+                        + (get_text("vpn_init_success") % self.country_code)
+                        + "\033[0m"
                     )
+
                     os.remove(success_file)  # 清理临时文件
                     os.remove(batch_file)
                     proc.stdout.close()
@@ -364,12 +623,12 @@ class VPN:
                 time.sleep(self.args.vpn_timeout_poll_interval)
                 total_wait += self.args.vpn_timeout_poll_interval
 
-            self.log.warning("VPN Initialization timed out.")
+            self.log.warning(get_text("vpn_init_timeout"))
             proc.stdout.close()
             self.terminate_vpn(proc)
             return False
         except KeyboardInterrupt:
-            self.log.info("\033[31mReceived keyboard interrupt.\033[0m")
+            self.log.info(get_text("received_keyboard_interrupt"))
             self.terminate_vpn(proc)
             os.remove(batch_file)
             os.remove(conffileName)
@@ -384,10 +643,7 @@ class VPN:
              (boolean) True if the users wants to use this VPN, False if not
 
         """
-        print(
-            "Would you like to use this VPN ? (No = \033[1mCTRL+C\033[0m, "
-            + "Yes = Any Key)"
-        )
+        print(get_text("use_or_change"))
 
         try:
             input()
@@ -413,7 +669,7 @@ class VPN:
 
             return True
 
-        self.log.info("Terminating VPN connection")
+        self.log.info(get_text("terminating_vpn"))
         # 尝试优雅地终止进程
         try:
             proc.terminate()
@@ -421,24 +677,22 @@ class VPN:
             # 如果 proc 没有 terminate 方法，尝试发送 SIGTERM 信号
             os.kill(proc.pid, signal.SIGTERM)
         finally:
-            self.log.info("VPN connection Terminated！")
+            self.log.info(get_text("vpn_terminated"))
 
         if not terminated():
-            self.warning("Termination timed out. Killing the process.")
+            self.log.warning(get_text("termination_timeout"))
             # proc.kill()
             os.kill(proc.pid, signal.SIGTERM)
             if not terminated():
-                self.log.critical("The VPN process can't be killed!")
-                self.log.critical("Exiting...")
+                self.log.critical(get_text("vpn_unkillable"))
+                self.log.critical(get_text("exiting"))
                 sys.exit(1)
 
     def speedtest(self):
         """Performs a speed test on the VPN connection."""
 
-        print(
-            "\033[90mPerforming connection speed test. Press CTRL+C to "
-            + "stop it.\033[0m"
-        )
+        print(get_text("performing_speedtest"))
+
         try:
             download_speed = speedtest()
             if download_speed < self.args.min_speed:
@@ -446,8 +700,53 @@ class VPN:
             else:
                 return True
         except KeyboardInterrupt:
-            print("Speedtest Canceled!")
+            print(get_text("speedtest_canceled"))
             return True
+
+    def setup_iptables_rules(self):
+        """Sets up iptables rules for blocking traffic that's not going
+        through the VPN. Useful to stop traffic leaking if the VPN disconnects
+        for some reason.
+        """
+
+        self.log.info("Setting iptables rules to block non-VPN traffic")
+
+        for cmd in IPv4_COMMANDS + IPv6_COMMANDS:
+            if "<IP>" in cmd:
+                cmd[cmd.index("<IP>")] = self.ip
+
+            if not check_call_infallible(cmd):
+                self.logging.exception(
+                    "Failed to setup iptables; rolling " + "back changes"
+                )
+                self.clear_iptables_rules()
+                return
+
+    def clear_iptables_rules(self):
+        """Clears iptables rules set by the setup_iptables_rules method."""
+
+        self.log.info("Clearing iptables rules")
+
+        # list() so that we don't modify the original list
+        for cmd in list(IPv4_COMMANDS):
+            # Replace the --append with --delete in the setup commands
+            cmd[cmd.index("--append")] = "--delete"
+            if "<IP>" in cmd:
+                cmd[cmd.index("<IP>")] = self.ip
+
+            if not check_call_infallible(cmd):
+                self.logging.exception(
+                    "Failed to call iptables; continuing " + "cleanup anyway"
+                )
+
+        for cmd in list(IPv6_COMMANDS):
+            # Replace DROP with ACCEPT to reverse the original action
+            cmd[cmd.index("DROP")] = "ACCEPT"
+
+            if not check_call_infallible(cmd):
+                self.logging.exception(
+                    "Failed to call ip6tables; continuing" + " cleanup anyway"
+                )
 
     def __str__(self):
         return "ip=%-15s, country=%s, proto=%s, port=%s" % (
@@ -476,12 +775,27 @@ class FileVPN(VPN):
         super().__init__(data, args)
 
 
+def check_call_infallible(cmd):
+    """Calls subprocess.check_call() and returns False if the process exits
+    with non-zero exit code instead of throwing CalledProcessException
+
+    Arguments:
+        (Array) cmd - The command to execute.
+
+    Returns:
+        (boolean) True if command succeeded, False otherwise.
+    """
+    try:
+        subprocess.check_call(cmd)
+    except subprocess.CalledProcessException:
+        return False
+    return True
+
+
 class VPNList:
 
     def __init__(self, args):
-        print(
-            "\033[2J\033[H\033[32m[VPNGATE-CLIENT] for Windows, Start running...\033[0m"
-        )
+        print("\033[2J\033[H\033[32m" + get_text("vpn_start_running") + "\033[0m")
         self.args = args
 
         # Setup logging
@@ -490,7 +804,7 @@ class VPNList:
         # Check if the local CSV file exists and is not expired
         self.local_csv_path = LOCAL_CSV_PATH
         if self.is_file_expired(self.local_csv_path):
-            self.log.info("VPN servers list expired,download now!")
+            self.log.info(get_text("vpnlist_expired"))
             self.download_vpn_list(self.args.url, self.local_csv_path)
 
         # Fetch the list
@@ -515,13 +829,13 @@ class VPNList:
             response = requests.get(proxy_url, timeout=3)
             # If the status code is 200, it means that the proxy URL is available
             return response.status_code == 200
-        except requests.RequestException as e:
+        except requests.RequestException:
             # self.log.error(f"Proxy check failed for {proxy_url}: {e}")
-            self.log.error(f"Proxy check failed for {proxy_url}")
+            self.log.error(get_text("proxy_check_failed"), proxy_url)
             return False
 
     # Returns the first available GitHub Proxy
-    def get_available_github_proxy(self):
+    def get_available_GitHub_proxy(self):
         proxies = [
             "https://ghproxy.net/",
             "https://gh.llkk.cc/",
@@ -532,14 +846,14 @@ class VPNList:
 
         for proxy in proxies:
             if self.check_proxy(proxy):
-                self.log.info(f"Available GitHub Proxy: {proxy}")
+                self.log.info(get_text("available_GitHub_proxy"), proxy)
                 return proxy
 
         return None
 
-    def download_vpn_list(self, url, file_path):
+    def download_vpn_list(self, url, file_path, backup_proxy=None):
         """Download the VPN list from the given URL and save it to the specified file path."""
-        self.log.info("Downloading VPN list from \033[90;4m%s\033[0m", url)
+        self.log.info(get_text("download_from_main_url"), url)
 
         try:
             # Download with proxy
@@ -553,54 +867,65 @@ class VPNList:
             data = req.read()
             with open(file_path, "wb") as f:
                 f.write(data)
-            self.log.info(
-                "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
-            )
-        except Exception as e:
-            # self.log.error("Failed to download from %s: %s", url, e)
-            self.log.error("Failed to download from \033[90;4m%s\033[0m", url)
+            self.log.info(get_text("vpnlist_download_saved_to_file"), file_path)
+        except Exception:
+            self.log.error(get_text("failed_to_download_from_main_url"))
             original_url = "https://raw.githubusercontent.com/sinspired/VpngateAPI/main/servers.csv"
 
             # Check available proxies and set an alternate download address
-            available_proxy = self.get_available_github_proxy()
+            available_proxy = self.get_available_GitHub_proxy()
             if available_proxy:
                 backup_url = f"{available_proxy}{original_url}"
                 self.log.info(
-                    "Attempting to download from backup URL: \033[90;4m%s\033[0m",
+                    get_text("attempt_download_from_backup_url"),
                     backup_url,
                 )
             else:
-                self.log.info(
-                    "No available proxy found, using original URL: \033[90;4m%s\033[0m",
-                    original_url,
-                )
-                backup_url = original_url
+                if backup_proxy:
+                    backup_url = f"{backup_proxy}{original_url}"
+                    self.log.info(
+                        get_text("attempt_download_from_backup_url"),
+                        backup_url,
+                    )
+                else:
+                    backup_url = original_url
+                    self.log.info(
+                        get_text("attempt_download_from_backup_url"),
+                        backup_url,
+                    )
 
             try:
                 # Uninstall proxy
                 urllib.request.install_opener(None)
-                req = urllib.request.urlopen(backup_url,timeout=10)
+                req = urllib.request.urlopen(backup_url)
                 data = req.read()
                 with open(file_path, "wb") as f:
                     f.write(data)
-                self.log.info(
-                    "VPN list downloaded and saved to \033[90;4m%s\033[0m", file_path
-                )
-            except Exception as e:
+                self.log.info(get_text("vpnlist_download_saved_to_file"), file_path)
+            except Exception:
                 self.log.error(
-                    "Failed to download from backup URL %s: %s", backup_url, e
+                    get_text("failed_to_download_from_backup_url"), backup_url
                 )
 
     def load_vpns(self, file_path):
         """Loads the VPN list from vpngate.net and parses then to |self.vpns|."""
         # self.log.info("Loading VPN list from %s", self.args.url)
-        self.log.info("Loading VPN list from \033[90;4m%s\033[0m", file_path)
+        self.log.info(get_text("loading_vpn_list"), file_path)
         # Read the data
+        if not os.path.exists(file_path):
+            self.log.error(
+                get_text("get_vpnlist_with_backup_proxy"), "https://ghproxy.net/"
+            )
+            self.download_vpn_list(self.args.url, file_path, "https://ghproxy.net/")
+        if not os.path.exists(file_path):
+            self.log.error(get_text("file_path_not_found"), file_path)
+            sys.exit(1)
+        # Read the CSV file
         with open(file_path, "r", encoding="utf8") as f:
             rows = filter(lambda r: not r.startswith("*"), f)
             reader = csv.DictReader(rows)
             self.vpns = [VPN(row, self.args) for row in reader]
-        self.log.info("Found \033[32m%i\033[0m VPN servers", len(self.vpns))
+        self.log.info(get_text("found_vpn_servers"), len(self.vpns))
 
     def filter_by_country(self):
         """Filters the VPN list based on geographic information."""
@@ -636,7 +961,7 @@ class VPNList:
         """Probes VPN servers listening on TCP ports and removes those who do
         not reply in timely manner from the list of available VPNs.
         """
-        self.log.info("Filtering out unresponsive VPN servers")
+        self.log.info(get_text("filtering_servers"))
 
         # The number of concurrent probes
         n = self.args.probes
@@ -654,10 +979,10 @@ class VPNList:
                     if future.result():
                         responding.append(vpn)
 
-                except:
+                except Exception:
                     self.log.exception("Availability probe failed")
 
-        self.log.info("Found \033[32m%i\033[0m responding VPNs", len(responding))
+        self.log.info(get_text("found_responding_vpns"), len(responding))
 
         self.vpns = responding
 
@@ -669,8 +994,8 @@ def speedtest():
     FILESIZE = float(match.group(1))
 
     chunk_size = 4096  # 每次读取的块大小，单位为字节
-    duration = 5  # 测试持续时间，单位为秒
-    timeout = 20  # 请求超时时间，单位为秒
+    duration = 1  # 测试持续时间，单位为秒
+    timeout = 10  # 请求超时时间，单位为秒
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
@@ -710,90 +1035,97 @@ def speedtest():
 
 def parse_args():
     """Parses the command line arguments."""
-    p = argparse.ArgumentParser(description="Client for vpngate.net VPNs")
+
+    p = argparse.ArgumentParser(description=get_text("appDescription"))
     p.add_argument(
         "--country",
         "-c",
         action="append",
-        help="A 2 char country code (e.g. CA for Canada) from "
-        + "which to look for a VPNs. If specified multiple "
-        + "times, VPNs from all the countries will be selected.",
+        help=get_text("h_arg_country"),
     )
     p.add_argument(
         "--eu",
         action="store_true",
-        help="Adds European countries to the list of considerable" + " countries",
+        help=get_text("h_arg_eu"),
     )
-    p.add_argument(
-        "--iptables",
-        "-i",
-        action="store_true",
-        help="Set iptables rules that block non-VPN traffic. "
-        + "WARNING: This option messes IPv6 iptables up!",
-    )
+    # p.add_argument(
+    #     "--iptables",
+    #     "-i",
+    #     action="store_true",
+    #     help=get_text('h_arg_iptables'),
+    # )
     p.add_argument(
         "--probes",
         action="store",
         default=100,
         type=int,
-        help="Number of concurrent connection probes to send.",
+        help=get_text("h_arg_probes"),
     )
     p.add_argument(
         "--probe-timeout",
         action="store",
         default=1500,
         type=int,
-        help="When probing, how long to wait for "
-        + "connection until marking the VPN as unavailable "
-        + "(milliseconds)",
+        help=get_text("h_arg_probe_timeout"),
     )
     p.add_argument(
-        "--url", action="store", default=VPN_LIST_URL, help="URL of the VPN list (csv)"
+        "--url",
+        action="store",
+        default=VPN_LIST_URL,
+        help=get_text("h_arg_url"),
     )
     p.add_argument(
         "--us",
         action="store_true",
-        help="Adds United States to the list of possible "
-        + "countries. Shorthand or --country US",
+        help=get_text("h_arg_us"),
     )
-    p.add_argument("--verbose", "-v", action="store_true", help="More verbose output")
+    p.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help=get_text("h_arg_verbose"),
+    )
     p.add_argument(
         "--vpn-timeout",
         action="store",
         default=10,
         type=int,
-        help="Time to wait for a VPN to be established "
-        + "before giving up (seconds).",
+        help=get_text("h_arg_vpn_timeout"),
     )
     p.add_argument(
         "--vpn-timeout-poll-interval",
         action="store",
         default=0.1,
         type=int,
-        help="Time between two checks for a potential timeout (seconds)",
+        help=get_text("h_arg_vpn_timeout_poll_interval"),
     )
     p.add_argument(
         "ovpnfile",
         type=argparse.FileType("rb"),
         default=None,
         nargs="?",
-        help="Connects to the OpenVPN VPN whose configuration is "
-        + "in the provided .ovpn file",
+        help=get_text("h_arg_ovpnfile"),
     )
     p.add_argument(
         "--expired-time",
         action="store",
         default=DEFAULT_EXPIRED_TIME,
         type=int,
-        help="Time to wait for a ServersList to be expired",
+        help=get_text("h_arg_expired_time"),
     )
     p.add_argument(
         "--min-speed",
         action="store",
         default=DEFAULT_MIN_SPEED,
         type=float,
-        help="Min download speed",
+        help=get_text("h_arg_min_speed"),
     )
+
+    # 覆盖默认的 help 信息
+    p._positionals.title = get_text("positional_arguments")
+    p._optionals.title = get_text("optional_arguments")
+    p._defaults["help"] = get_text("h_help")
+
     return p.parse_args()
 
 
@@ -834,52 +1166,121 @@ def vpn_list_main(args):
         else:
             continue
 
-    logger.info("\033[31mExiting...\033[0m")
+    logger.info(get_text("exiting"))
 
 
 def isAdmin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 
 def addOpenVPNtoSysPath():
-    # OpenVPN bin 目录路径
-    openvpn_bin_path = r"C:\Program Files\OpenVPN\bin"
+    """Add OpenVPN binary path to system PATH environment variable."""
+    if sys.platform == "win32":
+        # Windows paths
+        openvpn_paths = [
+            r"C:\Program Files\OpenVPN\bin",
+            r"C:\Program Files (x86)\OpenVPN\bin",
+        ]
+    else:
+        # Linux/macOS paths
+        openvpn_paths = [
+            "/usr/sbin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/usr/local/bin",
+        ]
 
-    # 检查目录是否存在
-    if os.path.exists(openvpn_bin_path):
-        # 获取当前环境变量 PATH
-        current_path = os.environ.get("PATH", "")
+    # Get current PATH
+    current_path = os.environ.get("PATH", "")
+    path_separator = ";" if sys.platform == "win32" else ":"
+    current_paths = current_path.split(path_separator)
 
-        # 检查 bin 目录是否在 PATH 中
-        if openvpn_bin_path not in current_path:
-            # 将 bin 目录添加到 PATH
-            os.environ["PATH"] = f"{openvpn_bin_path};{current_path}"
-            print(f"{openvpn_bin_path} 已添加到 PATH 环境变量中。")
+    for openvpn_path in openvpn_paths:
+        if os.path.exists(openvpn_path) and openvpn_path not in current_paths:
+            # Add OpenVPN path to PATH
+            os.environ["PATH"] = f"{openvpn_path}{path_separator}{current_path}"
+            print(f"Added {openvpn_path} to PATH environment variable.")
 
-            # 如果需要将修改后的 PATH 持久化，可以使用以下代码
+            # Persist PATH changes on Windows
             if sys.platform == "win32":
-                import winreg
+                try:
+                    import winreg
 
-                def set_environment_variable(name, value):
                     with winreg.OpenKey(
                         winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE
                     ) as key:
-                        winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, value)
+                        winreg.SetValueEx(
+                            key, "PATH", 0, winreg.REG_EXPAND_SZ, os.environ["PATH"]
+                        )
+                    print("Environment PATH updated in Registry.")
+                except Exception as e:
+                    print(f"Failed to update Registry: {e}")
+            return True
 
-                set_environment_variable("PATH", os.environ["PATH"])
-                print("Environment PATH updated and add to Rigistry。")
+    print("\033[33mWarning: OpenVPN installation not found in standard paths.\033[0m")
+    return False
+
+
+def customLogger():
+    args = parse_args()
+
+    # 自定义时间格式
+    def custom_time(*args):
+        return datetime.now().strftime("%I:%M%p")
+
+    # 定义颜色常量
+    class LogColors:
+        BLUE = "\033[34m"
+        GREEN = "\033[32m"
+        YELLOW = "\033[33m"
+        RED = "\033[31m"
+        RESET = "\033[0m"
+
+    # 自定义格式化器
+    class ColoredFormatter(logging.Formatter):
+        def format(self, record):
+            levelname = record.levelname
+            color_map = {
+                "DEBUG": LogColors.BLUE,
+                "INFO": LogColors.GREEN,
+                "WARNING": LogColors.YELLOW,
+                "ERROR": LogColors.RED,
+                "CRITICAL": LogColors.RED,
+            }
+            record.levelname = (
+                f"{color_map.get(levelname, '')}{levelname}{LogColors.RESET}"
+            )
+            return super().format(record)
+
+    # 日志格式
+    verbose_format = "%(asctime)s %(levelname)s \033[36m%(name)s\033[0m: \033[35m%(funcName)s\033[0m: %(message)s"
+    simple_format = "%(levelname)s:%(name)s %(message)s"
+
+    # 配置日志处理器和格式化器
+    handler = logging.StreamHandler()
+
+    # 根据是否启用verbose模式设置不同的格式
+    if args.verbose:
+        handler.setFormatter(ColoredFormatter(verbose_format, datefmt="%I:%M%p"))
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
     else:
-        print(f"{openvpn_bin_path} doesn't exist,please install OpenVPN.")
+        handler.setFormatter(logging.Formatter(simple_format))
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+
+    logger.handlers = []  # 清除所有默认的处理器
+    logger.addHandler(handler)
 
 
 def main():
     args = parse_args()
+
     # Check if OpenVPN is installed
     if not shutil.which("openvpn"):
-        # Check if OpenVPN BIN is added to PATH
         addOpenVPNtoSysPath()
         if not shutil.which("openvpn"):
             print(
@@ -887,16 +1288,15 @@ def main():
             )
             exit(1)
 
-    if not isAdmin():
+    if not isAdmin() and not is_linux:
+        params = " ".join([f'"{arg}"' for arg in sys.argv])
         ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, __file__, None, 1
+            None, "runas", sys.executable, params, None, 1
         )
         return 1
 
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    # 自定义输出格式
+    customLogger()
 
     if args.ovpnfile:
         # Load a single VPN from the given file.

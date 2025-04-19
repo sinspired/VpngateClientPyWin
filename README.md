@@ -20,7 +20,7 @@ This client has following dependencies:
 ### Install for Windows
 
 ```powershell
-  git clone https://github.com/sinspired/VpngateClientPyWin.git
+  git clone https://github.com/sinspired/VpngateClient.git
   cd VpngateClientPyWin
   pip install -e .
   vpngate

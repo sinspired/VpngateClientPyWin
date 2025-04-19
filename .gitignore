@@ -10,6 +10,17 @@ dist
 .vs*/
 .venv/
 env/
+venv/
+env.bak/
+venv.bak/
+*.egg
+*.egg-info/
+*.whl
+*.pdb
+*.pdb
+*.pyo
+*.pyd
+*.db
 
 # https://github.com/phusion/debian-packaging-for-the-modern-developer/blob/master/.gitignore
 debhelper-build-stamp

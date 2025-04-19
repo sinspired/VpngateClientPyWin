@@ -3,70 +3,284 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types: [created]
 
 jobs:
-  build-and-release:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+            arch: amd64
+            pyinstaller-arch: ""
+            artifact-suffix: Linux-amd64
+          - os: ubuntu-latest
+            platform: Linux
+            arch: arm64
+            pyinstaller-arch: "--target-arch aarch64"
+            artifact-suffix: Linux-arm64
+          - os: windows-latest
+            platform: Windows
+            arch: x64
+            pyinstaller-arch: ""
+            artifact-suffix: Windows-x64
+          # Windows arm64 交叉编译 PyInstaller 不支持，需在 arm64 runner 上运行
+          # - os: windows-latest
+          #   platform: Windows
+          #   arch: arm64
+          #   pyinstaller-arch: "--target-arch arm64"
+          #   artifact-suffix: Windows-arm64
+          - os: macos-latest
+            platform: macOS
+            arch: amd64
+            pyinstaller-arch: ""
+            artifact-suffix: macOS-amd64
+          - os: macos-latest
+            platform: macOS
+            arch: arm64
+            pyinstaller-arch: "--target-arch arm64"
+            artifact-suffix: macOS-arm64
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('**\requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install future-fstrings
           pip install pyinstaller
 
-      - name: Build executable
-        run: |
-          # pyinstaller --hidden-import=console.detection --onefile --uac-admin VpngateClient\VpngateClient.py
-          pyinstaller --onefile --uac-admin -i VpngateClient\logo.ico VpngateClient\VpngateClient.py
-          pyinstaller --onefile --uac-admin -i VpngateClient\logo.ico VpngateClient\VpngateClient_global.py
-          dir dist
-
-      - name: Get tag info
-        id: get_tag_info
+      - name: Build Windows Executable
+        if: matrix.os == 'windows-latest' && matrix.arch == 'x64'
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0
-          echo "LATEST_TAG=$tag" >> $env:GITHUB_ENV
-          $tagMessage = git tag -l --format='%(contents)' $LATEST_TAG
-          echo "TAG_MESSAGE=$tagMessage" >> $env:GITHUB_ENV
+          pyinstaller --onefile --clean --uac-admin --name VpngateClient-${{ matrix.artifact-suffix }} --icon VpngateClient/logo.ico VpngateClient/VpngateClient.py
+          pyinstaller --onedir --clean --uac-admin --name VpngateClient-${{ matrix.platform }}-Portable-${{ matrix.arch }} --icon VpngateClient/logo.ico VpngateClient/VpngateClient.py
 
-      - name: Delete old release
+      # - name: Build Windows ARM64 Executable
+      #   if: matrix.os == 'windows-latest' && matrix.arch == 'arm64'
+      #   shell: pwsh
+      #   run: |
+      #     # PyInstaller does not support cross-compiling to Windows ARM64 on x64 runner.
+      #     echo "PyInstaller does not support cross-compiling to Windows ARM64."
+
+      - name: Package Windows Portable
+        if: matrix.os == 'windows-latest' && matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\VpngateClient-Windows-Portable-x64\*" -DestinationPath "dist\VpngateClient-Windows-Portable-x64.zip" -Force
+
+      - name: Build Linux Executable
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential
+          sudo gem install --no-document fpm
+          pyinstaller --onefile --clean ${{ matrix.pyinstaller-arch }} --name VpngateClient-${{ matrix.artifact-suffix }} --icon VpngateClient/logo.png VpngateClient/VpngateClient.py
+
+      - name: Build Linux DEB Package
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mkdir -p package/usr/local/bin package/usr/share/applications package/usr/share/icons/hicolor/256x256/apps
+          cp dist/VpngateClient-${{ matrix.artifact-suffix }} package/usr/local/bin/VpngateClient
+          chmod +x package/usr/local/bin/VpngateClient
+          cp ./VpngateClient/logo.png package/usr/share/icons/hicolor/256x256/apps/vpngate-client.png
+          cat > package/usr/share/applications/vpngate-client.desktop << 'EOL'
+          [Desktop Entry]
+          Name=VPN Gate Client
+          Exec=VpngateClient
+          Icon=vpngate-client
+          Type=Application
+          Categories=Network;
+          Terminal=true
+          EOL
+          fpm -s dir -t deb -n vpngate-client -v ${GITHUB_REF_NAME#v} -C package .
+          mv vpngate-client_*.deb dist/VpngateClient-${{ matrix.artifact-suffix }}.deb
+
+      - name: Build macOS Executable
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          pyinstaller --onefile --clean ${{ matrix.pyinstaller-arch }} --name VpngateClient-${{ matrix.artifact-suffix }} --icon VpngateClient/logo.icns VpngateClient/VpngateClient.py
+
+      - name: Package macOS App and DMG
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          mkdir -p dist/VpngateClient.app/Contents/{MacOS,Resources}
+          cp dist/VpngateClient-${{ matrix.artifact-suffix }} dist/VpngateClient.app/Contents/MacOS/VpngateClient
+          chmod +x dist/VpngateClient.app/Contents/MacOS/VpngateClient
+          cp VpngateClient/logo.icns dist/VpngateClient.app/Contents/Resources/ || true
+          cat > dist/VpngateClient.app/Contents/Info.plist << 'EOL'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>VpngateClient</string>
+              <key>CFBundleIconFile</key>
+              <string>logo</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.vpngate.client</string>
+              <key>CFBundleName</key>
+              <string>VPN Gate Client</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleVersion</key>
+              <string>${GITHUB_REF_NAME#v}</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOL
+          hdiutil create -volname VpngateClient -srcfolder dist/VpngateClient.app -ov -format UDZO dist/VpngateClient-${{ matrix.artifact-suffix }}.dmg
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}-executables
+          path: |
+            dist/VpngateClient-Windows-x64.exe
+            dist/VpngateClient-Windows-Portable-x64.zip
+            dist/VpngateClient-Linux-amd64
+            dist/VpngateClient-Linux-amd64.deb
+            dist/VpngateClient-Linux-arm64
+            dist/VpngateClient-Linux-arm64.deb
+            dist/VpngateClient-macOS-amd64.dmg
+            dist/VpngateClient-macOS-arm64.dmg
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-assets
+          find release-files -type f -name 'VpngateClient-*' -exec cp {} release-assets/ \;
+        shell: bash
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${{ github.ref_name }}$" | head -n 1)
+          echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Get changelog since previous tag
+        id: changelog
+        run: |
+          if [ -n "${{ steps.prev_tag.outputs.prev_tag }}" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${{ steps.prev_tag.outputs.prev_tag }}..${{ github.ref_name }})
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)")
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Check existing release
+        id: check_release
+        run: |
+          if gh release view ${{ github.ref_name }} &> /dev/null; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete existing release
+        if: steps.check_release.outputs.release_exists == 'true'
         run: |
-          gh release delete ${{ env.LATEST_TAG }} -y --cleanup-tag
-        continue-on-error: true
+          gh release delete ${{ github.ref_name }} --yes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ./dist/vpngateclient.exe
-            ./dist/vpngateclient_global.exe
-          name: "VPNGate Client ${{ env.LATEST_TAG }}"
-          body: |
-            Release of VPNGate Client ${{ env.LATEST_TAG }}
+        run: |
+          shopt -s nullglob
+          FILES=(release-assets/*)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No release files found, skipping upload."
+            exit 0
+          fi
 
-            ${{ env.TAG_MESSAGE }}
-          tag_name: ${{ env.LATEST_TAG }}
+          echo "Release files:"
+          ls -lh release-assets/
+
+          cat > RELEASE_NOTES.md <<'EOF'
+
+          ## 📝 Changelog
+
+          ${{ steps.changelog.outputs.changelog }}
+
+          ## 📦 Downloads
+
+          | Platform | File |
+          |----------|------|
+          | Windows x64 | [![windows x64](https://custom-icon-badges.demolab.com/badge/Exe-x64-2d7d9a.svg?logo=windows11)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-Windows-x64.exe) |
+          | Windows Portable x64 | [![windows portable x64](https://custom-icon-badges.demolab.com/badge/Portable-x64-67b7d1.svg?logo=windows11)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-Windows-Portable-x64.zip) |
+          | Linux amd64 | [![Linux amd64](https://img.shields.io/badge/Linux-amd64-f84e29.svg?logo=linux)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-Linux-amd64) |
+          | Linux amd64 DEB | [![Linux amd64 DEB](https://img.shields.io/badge/DebPackage-amd64-FF9966.svg?logo=debian)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-Linux-amd64.deb) |
+          | Linux arm64 | [![Linux arm64](https://img.shields.io/badge/Linux-arm64-1E4CC9.svg?logo=linux)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-Linux-arm64) |
+          | Linux arm64 DEB | [![Linux arm64 DEB](https://img.shields.io/badge/DebPackage-arm64-6683D2.svg?logo=debian)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-Linux-arm64.deb) |
+          | macOS amd64 | [![macOS amd64](https://img.shields.io/badge/DMG-Intel_amd64-%2300A9E0.svg?logo=apple)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-macOS-amd64.dmg) |
+          | macOS arm64 | [![macOS arm64](https://img.shields.io/badge/DMG-Apple_Silicon-%23000000.svg?logo=apple)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/VpngateClient-macOS-arm64.dmg) |
+
+          ## 🔧 Installation
+
+          ### Windows
+          - Single file: Download `.exe` and run directly
+          - Portable: Download `.zip`, extract and run `VpngateClient-Windows-Portable-x64.exe`
+          - Request admin privileges, allow it
+
+          ### Linux
+          - Executable: 
+            Download and `chmod +x VpngateClient-Linux-amd64` or `VpngateClient-Linux-arm64`
+            run `sudo ./VpngateClient-Linux-amd64`
+          
+          - DEB: 
+            `sudo dpkg -i VpngateClient-Linux-amd64.deb` or `VpngateClient-Linux-arm64.deb`
+
+          ### macOS
+          - Download `.dmg`, open and drag app to Applications
+
+          EOF
+
+          gh release create ${{ github.ref_name }} \
+            --title "${{ github.ref_name }}" \
+            --notes-file RELEASE_NOTES.md \
+            --draft=false \
+            "${FILES[@]}"
+        shell: bash
